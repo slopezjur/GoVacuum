@@ -95,9 +95,11 @@ class NavigationSystem {
                     stepCost += 50;
                 }
 
-                // During edge phase, strongly prefer staying on the room perimeter
+                // During edge phase, prefer staying on the room perimeter, but keep the penalty low
+                // (e.g., +6) so that bypassing a known obstacle on the edge is cheaper than
+                // turning back and traversing the clean perimeter backwards.
                 if (edgePhase && roomBounds && !this.isRoomEdgeTile(roomBounds, nx, ny)) {
-                    stepCost += 30;
+                    stepCost += 6;
                 }
 
                 let nextG = current.g + stepCost;
@@ -123,14 +125,20 @@ class NavigationSystem {
 
         if (isEdgePhase) {
             // ----------------------------------------------------
-            // CLOCKWISE EDGE SWEEP: one perimeter leg per replan
+            // CLOCKWISE EDGE SWEEP: generate full perimeter path
+            // Bypasses obstacles by routing through interior tiles,
+            // then returns to the edge on the other side.
+            // If a target is truly unreachable it's skipped and the
+            // sweep continues to the next reachable perimeter tile.
             // ----------------------------------------------------
             let edgeTargets = this.getEdgeTargets(room);
             const startIdx = edgeStartIndex ?? this.resolveEdgeStartIndex(room, currentX, currentY);
             edgeTargets = [...edgeTargets.slice(startIdx), ...edgeTargets.slice(0, startIdx)];
 
+            let reachedNewTarget = false;
+
             for (let target of edgeTargets) {
-                // Skip if already cleaned, blocked, or invalid
+                // Skip if already cleaned, blocked by an obstacle, or invalid
                 if (!state.isValidPosition(target.x, target.y) ||
                     plannedDirt[target.y][target.x] === 0 ||
                     state.hasKnownObstacleAt(target.x, target.y)) {
@@ -146,11 +154,34 @@ class NavigationSystem {
 
                 if (subPath.length > 0) {
                     fullPath.push(...subPath);
-                    break;
+                    // Mark tiles along the found sub-path as mentally cleaned so we don't
+                    // immediately backtrack over them on the next replan.
+                    for (let p of subPath) {
+                        let px = Math.floor(p.x);
+                        let py = Math.floor(p.y);
+                        if (plannedDirt[py] && plannedDirt[py][px] !== undefined) {
+                            plannedDirt[py][px] = 0;
+                        }
+                    }
+                    cx = target.x;
+                    cy = target.y;
+                    reachedNewTarget = true;
+                    // Continue to the next edge target instead of breaking — this builds a
+                    // longer perimeter path that naturally curves around obstacles.
                 }
+                // Unreachable edge tile: leave plannedDirt as-is and try the next target.
+                // Only transition to CLEAN_INNER when *no* new target was reached in the
+                // entire pass (handled by the caller checking fullPath.length === 0).
+            }
 
-                // Unreachable edge tile: skip it and try the next perimeter target
-                plannedDirt[target.y][target.x] = 0;
+            // If we didn't reach any new edge target at all, the perimeter is done / blocked.
+            if (!reachedNewTarget) {
+                // Mark remaining dirty edge tiles as cleaned so the caller transitions phases.
+                for (let target of edgeTargets) {
+                    if (plannedDirt[target.y]?.[target.x] === 1 && !state.hasKnownObstacleAt(target.x, target.y)) {
+                        plannedDirt[target.y][target.x] = 0;
+                    }
+                }
             }
         } else {
             // ----------------------------------------------------

@@ -38,7 +38,12 @@ class GameEngine {
 
     replanRoute() {
         if (this.currentTask.type === 'CLEAN_EDGE') {
-            // Phase 1: Perimeter Sweep
+            // Phase 1: Perimeter Sweep — dynamically update edgeStartIndex so replans
+            // always start searching from the robot's current perimeter position.
+            this.currentTask.edgeStartIndex = NavigationSystem.resolveEdgeStartIndex(
+                this.currentTask.room, this.robot.x, this.robot.y
+            );
+
             const sweepPath = NavigationSystem.generateRoomSweepPath(
                 this.state,
                 this.currentTask.room,
@@ -49,8 +54,10 @@ class GameEngine {
             );
 
             if (sweepPath.length === 0) {
+                // No more reachable edge tiles — either all cleaned or all blocked.
+                // Check if there are genuinely uncleaned edge tiles remaining;
+                // if not, transition to interior phase.
                 this.currentTask.type = 'CLEAN_INNER';
-                this.currentTask.edgeStartIndex = null;
                 this.updateStatus(`Status: Room perimeter mapped. Cleaning interior...`);
                 this.replanRoute();
                 return;

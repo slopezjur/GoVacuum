@@ -14,7 +14,7 @@ The project has been architected strictly following the **Single Responsibility 
 
 ```bash
 GoVacuum/
-├── robot_vacuum_simulation.html    # Main HTML document and UI structure (control panels & canvases)
+├── index.html                      # Main HTML document and UI structure (control panels & canvases)
 ├── css/
 │   └── robot_vacuum_game.css       # Core styling, responsive layouts, stuck modal styling
 ├── js/
@@ -26,7 +26,7 @@ GoVacuum/
 │   ├── robot_vacuum_renderer_3d.js # Canvas-based 3D Raycasting engine & Sprite z-buffer renderer
 │   ├── robot_vacuum_engine.js      # GameLoop manager and task coordinator (IDLE/EDGE/INNER/RETURN)
 │   └── robot_vacuum_game.js        # Bootstrapper module wiring UI button inputs to the GameEngine
-└── documentation/
+└── docs/
     └── GoVacuumInit.txt            # Original system specification and blueprint guidelines
 ```
 
@@ -57,7 +57,8 @@ GoVacuum/
 ---
 
 ## 🎮 How to Play / Run Locally
+Access to https://slopezjur.github.io/GoVacuum/ or
 1. Clone this repository to your local machine.
-2. Double-click `robot_vacuum_simulation.html` to open it in any modern browser (Chrome, Firefox, Safari, Edge).
+2. Double-click `index.html` to open it in any modern browser (Chrome, Firefox, Safari, Edge).
 3. Use the top control bar to command the robot to sweep the **Living Room**, **Bedroom**, or **Kitchen**.
 4. Click anywhere on the 2D Map View canvas to dynamically add or remove obstacles and watch the robot recalculate its path on the fly!
