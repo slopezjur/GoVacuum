@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clean Vacuum Robot Simulator - Clockwise Edge Sweep</title>
+    <link rel="stylesheet" href="css/robot_vacuum_game.css">
+</head>
+<body>
+
+<div class="container">
+    <div class="top-bar">
+        <span>🤖 <strong>Clean Vacuum System</strong></span>
+        <button id="cleanLivingRoomBtn">Clean Living Room</button>
+        <button id="cleanBedroomBtn">Clean Bedroom</button>
+        <button id="cleanKitchenBtn">Clean Kitchen</button>
+        <button id="resetMapBtn" class="warning">Reset Map</button>
+        <button id="returnToBaseBtn" class="danger">Return to Base</button>
+        <div class="status" id="statusText">System Initialized.</div>
+    </div>
+
+    <div class="view-container">
+        <div class="panel">
+            <header>
+                <span>Map View (Robot Memory)</span>
+                <span class="header-hint">Click: Add/Remove Real Object</span>
+            </header>
+            <canvas id="mapCanvas" width="600" height="360"></canvas>
+            
+            <div id="stuckModal">
+                <h2>⚠️ Robot Stuck</h2>
+                <p>The vacuum cannot find a valid route due to obstacles.</p>
+                <div class="modal-actions">
+                    <button id="emergencyResetBtn" class="danger">Reset at Base</button>
+                    <button id="closeModalBtn">Close & Clear Manually</button>
+                </div>
+            </div>
+        </div>
+        <div class="panel">
+            <header>First-Person View (Panoramic Camera)</header>
+            <canvas id="camCanvas" width="1024" height="360"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="js/robot_vacuum_config.js"></script>
+<script src="js/robot_vacuum_game_state.js"></script>
+<script src="js/robot_vacuum_navigation.js"></script>
+<script src="js/robot_vacuum_robot.js"></script>
+<script src="js/robot_vacuum_renderer_2d.js"></script>
+<script src="js/robot_vacuum_renderer_3d.js"></script>
+<script src="js/robot_vacuum_engine.js"></script>
+<script src="js/robot_vacuum_game.js"></script>
+</body>
+</html>
