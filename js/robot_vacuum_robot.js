@@ -7,6 +7,9 @@ class VacuumRobot {
         this.y = CONFIG.ROBOT.START_Y;
         this.angle = 0;
         this.path = [];
+        // Brush state
+        this.brushAngle = 0;
+        this.brushSpinning = false;
         this.updateVectors();
     }
 
@@ -15,23 +18,37 @@ class VacuumRobot {
     }
 
     update(state, currentTask, onCompleteCallback) {
-        if (this.path.length === 0) return;
+        if (this.path.length === 0) {
+            // Stop brush when no path (idle or docked)
+            this.brushSpinning = false;
+            return;
+        }
 
         const target = this.path[0];
         const dx = target.x - this.x; const dy = target.y - this.y;
         const distance = Math.hypot(dx, dy);
+
+        // Determine if we are in reverse-parking mode
+        let isReversing = false;
+        if (currentTask === 'RETURN' && this.path.length === 1 && Math.floor(target.x) === CONFIG.ROBOT.BASE_X && Math.floor(target.y) === CONFIG.ROBOT.BASE_Y) {
+            isReversing = true;
+        }
+
+        // Brush spins when moving out of base (any non-IDLE task) and not reversing
+        // Brush stops during reverse-parking and when at base/idle
+        this.brushSpinning = currentTask !== 'IDLE' && !isReversing && !this.isAtBase();
 
         if (distance < CONFIG.ROBOT.SPEED) {
             this.x = target.x; this.y = target.y;
             this.path.shift();
             if (this.path.length === 0) onCompleteCallback();
         } else {
-            // Parking logic: reverse into base
-            let isReversing = false;
-            if (currentTask === 'RETURN' && this.path.length === 1 && Math.floor(target.x) === CONFIG.ROBOT.BASE_X && Math.floor(target.y) === CONFIG.ROBOT.BASE_Y) {
-                isReversing = true;
-            }
             this.rotateAndMove(dx, dy, isReversing);
+        }
+
+        // Update brush rotation when spinning (counter-clockwise for dust collection)
+        if (this.brushSpinning) {
+            this.brushAngle -= CONFIG.ROBOT.BRUSH_SPIN_SPEED;
         }
 
         this.updateVectors();
@@ -66,6 +83,20 @@ class VacuumRobot {
 
     isAtBase() {
         return Math.floor(this.x) === CONFIG.ROBOT.BASE_X && Math.floor(this.y) === CONFIG.ROBOT.BASE_Y;
+    }
+
+    /**
+     * Get brush visualization parameters for 2D rendering.
+     * Returns an object with brush position, angle, stick count, and whether it's spinning (for opacity effect).
+     */
+    getBrushConfig() {
+        return {
+            x: this.x,
+            y: this.y,
+            angle: this.brushAngle,
+            stickCount: CONFIG.ROBOT.BRUSH_STICK_COUNT,
+            spinning: this.brushSpinning
+        };
     }
 }
 

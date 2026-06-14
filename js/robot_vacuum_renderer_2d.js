@@ -127,12 +127,53 @@ class Renderer2D {
 
     drawRobot(robot) {
         const cx = robot.x * this.tileSize; const cy = robot.y * this.tileSize;
+
+        // Draw robot body circle
         this.ctx.fillStyle = CONFIG.COLORS.ROBOT;
         this.ctx.beginPath(); this.ctx.arc(cx, cy, this.tileSize / 3, 0, Math.PI * 2); this.ctx.fill();
-        this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 2;
-        this.ctx.beginPath(); this.ctx.moveTo(cx, cy);
-        this.ctx.lineTo((robot.x + robot.dirX * 0.8) * this.tileSize, (robot.y + robot.dirY * 0.8) * this.tileSize);
-        this.ctx.stroke();
+
+        // Always draw the brush on the right side at 45 degrees from the robot's facing direction
+        const brushConfig = robot.getBrushConfig();
+        if (brushConfig) {
+            // Offset position: right-front at +45 degrees from the robot's facing direction
+            const offsetAngle = robot.angle + Math.PI / 4; // Right side plus 45 degrees
+            const offsetDistance = this.tileSize * 0.325;
+            const brushCx = cx + Math.cos(offsetAngle) * offsetDistance;
+            const brushCy = cy + Math.sin(offsetAngle) * offsetDistance;
+            const brushRadius = this.tileSize * 0.22;
+            const pinLength = this.tileSize * 0.12;
+
+            // Draw arm connecting robot to brush
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            this.ctx.lineWidth = 1.5;
+            this.ctx.beginPath();
+            this.ctx.moveTo(cx, cy);
+            this.ctx.lineTo(brushCx, brushCy);
+            this.ctx.stroke();
+
+            // Semi-transparent white brush pins (spinning when active)
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            this.ctx.lineWidth = 2;
+
+            for (let i = 0; i < brushConfig.stickCount; i++) {
+                // Use brushConfig.angle when spinning (animated), otherwise use a static angle
+                const pinAngle = brushConfig.spinning 
+                    ? brushConfig.angle + (i * Math.PI * 2) / brushConfig.stickCount
+                    : -Math.PI / 4 + (i * Math.PI * 2) / brushConfig.stickCount;
+                const innerR = brushRadius * 0.35;
+                const outerR = brushRadius;
+
+                const startX = brushCx + Math.cos(pinAngle) * innerR;
+                const startY = brushCy + Math.sin(pinAngle) * innerR;
+                const endX = brushCx + Math.cos(pinAngle) * (innerR + pinLength);
+                const endY = brushCy + Math.sin(pinAngle) * (innerR + pinLength);
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(startX, startY);
+                this.ctx.lineTo(endX, endY);
+                this.ctx.stroke();
+            }
+        }
     }
 }
 

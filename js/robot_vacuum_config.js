@@ -10,7 +10,9 @@ const CONFIG = {
         SPEED: 0.0125,
         TURN_SPEED: 0.025,
         FOV: 0.66,
-        SENSOR_GRID_RANGE: 1 // Chebyshev distance for 3x3 square scanning
+        SENSOR_GRID_RANGE: 1, // Chebyshev distance for 3x3 square scanning
+        BRUSH_SPIN_SPEED: 0.18,
+        BRUSH_STICK_COUNT: 3
     },
     MAP_DATA: [
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
