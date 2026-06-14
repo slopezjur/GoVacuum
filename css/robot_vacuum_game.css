@@ -1,14 +1,15 @@
 :root { --bg: #111827; --panel: #0f1724; --accent: #06b6d4; --muted: #94a3b8; }
 html, body { height: 100%; margin: 0; font-family: Inter, system-ui, sans-serif; background: linear-gradient(180deg, #031024 0%, #071428 100%); color: #e6eef6; overflow: hidden; }
 .container { display: flex; flex-direction: column; height: 100vh; padding: 12px; box-sizing: border-box; gap: 12px; }
-.top-bar { display: flex; gap: 10px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); flex-wrap: wrap; z-index: 10;}
+.top-bar { display: flex; gap: 10px; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); flex-direction: column; z-index: 10; height: 72px; }
+.top-bar-inner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1; }
 button { background: var(--accent); border: none; padding: 8px 16px; border-radius: 6px; color: #042; cursor: pointer; font-weight: bold; transition: background 0.2s; }
 button:hover { background: #08c8ea; }
 button.danger { background: #ef4444; color: white; }
 button.danger:hover { background: #dc2626; }
 button.warning { background: #f59e0b; color: white; }
 button.warning:hover { background: #d97706; }
-.status { margin-left: auto; color: var(--accent); font-family: monospace; font-size: 14px; }
+.status { color: var(--accent); font-family: monospace; font-size: 14px; width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; flex: 1; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; }
 
 .view-container { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; position: relative; }
 

@@ -69,9 +69,7 @@ class GameEngine {
             const sweepPath = NavigationSystem.generateRoomSweepPath(this.state, this.currentTask.room, this.robot.x, this.robot.y, false);
 
             if (sweepPath.length === 0) {
-                this.updateStatus(`Status: Room ${this.currentTask.room.name} blocked. Returning.`);
-                this.currentTask = { type: 'RETURN', room: null };
-                this.replanRoute();
+                this.handlePhaseCompletion('CLEAN_INNER');
                 return;
             }
             this.robot.setPath(sweepPath);
@@ -127,6 +125,48 @@ class GameEngine {
         this.uiStatus.innerText = msg;
     }
 
+    handlePhaseCompletion(nextPhase) {
+        const room = this.currentTask.room;
+        if (!room) return;
+
+        // If transitioning from CLEAN_EDGE to CLEAN_INNER naturally (edge done, interior remains),
+        // just start the interior phase without showing a completion message yet.
+        if (nextPhase === 'CLEAN_INNER' && this.currentTask.type === 'CLEAN_EDGE') {
+            this.currentTask.type = 'CLEAN_INNER';
+            this.updateStatus(`Status: Room perimeter cleaned. Cleaning interior...`);
+            this.replanRoute();
+            return;
+        }
+
+        // Final status — only shown when returning to base (after both phases complete)
+        const ratio = this.state.getCleanedRatioForCurrentTargetRoom();
+        const total = this.state.getTotalTilesInRoom(room.id);
+        const cleaned = this.state.getTilesCleanedInCurrentTargetRoom();
+        const originalDirty = this.state.roomOriginalDirtyCount || 0;
+
+        if (originalDirty === 0) {
+            // Room had no dirt to begin with
+            this.updateStatus(`Status: Room ${room.name} was already clean. Returning.`);
+        } else if (ratio >= 0.99) {
+            // Fully cleaned all dirty tiles in the room
+            this.updateStatus(`Status: Room ${room.name} completely cleaned. Returning.`);
+        } else if (cleaned === 0) {
+            // No tiles in target room were cleaned, but there was dirt — so transit path blocked
+            this.updateStatus(`Status: Room ${room.name} blocked. Returning.`);
+        } else if (ratio < 0.5) {
+            // Less than half of dirty tiles cleaned
+            this.updateStatus(`Status: Room ${room.name} partially cleaned. Returning.`);
+        } else {
+            // More than half but not all
+            this.updateStatus(`Status: Room ${room.name} almost completely cleaned. Returning.`);
+        }
+
+        // Reset target room so future counts don't leak
+        this.state.currentTargetRoomId = null;
+        this.currentTask = { type: 'RETURN', room: null };
+        this.replanRoute();
+    }
+
     commandCleanRoom(roomId) {
         const room = this.state.rooms.find(r => r.id === roomId);
         if (!room) return;
@@ -136,8 +176,23 @@ class GameEngine {
             this.state.clearMemory();
         }
 
-        // Reset room dirt
+        // Reset cleaned count for this new task
+        this.state.roomTilesCleanedCount = {};
+
+        // Count how many tiles were dirty in the target room BEFORE we reset dirt
+        let dirtyCount = 0;
+        for (let y = room.y1; y <= room.y2; y++) {
+            for (let x = room.x1; x <= room.x2; x++) {
+                if (this.state.isValidPosition(x, y) && this.state.dirtMap[y][x] === 1) {
+                    dirtyCount++;
+                }
+            }
+        }
+        this.state.roomOriginalDirtyCount = dirtyCount;
+
+        // Now reset room dirt for the new cleaning task
         this.state.resetDirtForRoom(room);
+        this.state.currentTargetRoomId = room.id;
 
         // Start with Edge Sweep Phase (lock clockwise start index for the whole perimeter pass)
         this.currentTask = {

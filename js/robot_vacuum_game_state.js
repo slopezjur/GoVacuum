@@ -13,6 +13,10 @@ class GameState {
         // ROBOT MEMORY: Objects and Dirt map
         this.knownObjects = [ this.actualObjects.find(o => o.type === CONFIG.OBJECT_TYPES.BASE) ];
         this.dirtMap = this.initializeDirtMap();
+
+        // Track tiles cleaned per target room for accurate status messages
+        this.roomTilesCleanedCount = {};
+        this.currentTargetRoomId = null;
     }
 
     initializeDirtMap() {
@@ -22,6 +26,16 @@ class GameState {
     resetDirtForRoom(room) {
         for (let y = room.y1; y <= room.y2; y++) {
             for (let x = room.x1; x <= room.x2; x++) {
+                if (this.isValidPosition(x, y)) {
+                    this.dirtMap[y][x] = 1;
+                }
+            }
+        }
+    }
+
+    resetDirtForAllRooms() {
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
                 if (this.isValidPosition(x, y)) {
                     this.dirtMap[y][x] = 1;
                 }
@@ -127,7 +141,47 @@ class GameState {
 
     cleanDirtAt(x, y) {
         const gridX = Math.floor(x); const gridY = Math.floor(y);
-        if(this.isValidPosition(gridX, gridY)) this.dirtMap[gridY][gridX] = 0;
+        if(this.isValidPosition(gridX, gridY) && this.dirtMap[gridY][gridX] === 1) {
+            this.dirtMap[gridY][gridX] = 0;
+
+            // Only count tiles that belong to the current target room
+            if (this.currentTargetRoomId !== null && this.currentTargetRoomId !== undefined) {
+                const targetRoom = this.rooms.find(r => r.id === this.currentTargetRoomId);
+                if (targetRoom && gridX >= targetRoom.x1 && gridX <= targetRoom.x2 && gridY >= targetRoom.y1 && gridY <= targetRoom.y2) {
+                    if (!this.roomTilesCleanedCount[this.currentTargetRoomId]) {
+                        this.roomTilesCleanedCount[this.currentTargetRoomId] = 0;
+                    }
+                    this.roomTilesCleanedCount[this.currentTargetRoomId]++;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    getTilesCleanedInCurrentTargetRoom() {
+        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) return 0;
+        return this.roomTilesCleanedCount[this.currentTargetRoomId] || 0;
+    }
+
+    getTotalTilesInRoom(roomId) {
+        const room = this.rooms.find(r => r.id === roomId);
+        if (!room) return 0;
+        let count = 0;
+        for (let y = room.y1; y <= room.y2; y++) {
+            for (let x = room.x1; x <= room.x2; x++) {
+                if (this.isValidPosition(x, y)) count++;
+            }
+        }
+        return count;
+    }
+
+    getCleanedRatioForCurrentTargetRoom() {
+        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) return 0;
+        const total = this.getTotalTilesInRoom(this.currentTargetRoomId);
+        if (total === 0) return 0;
+        const cleaned = this.getTilesCleanedInCurrentTargetRoom();
+        return cleaned / total;
     }
 
     isValidPosition(x, y) {
@@ -138,4 +192,3 @@ class GameState {
         return this.knownObjects.some(o => Math.floor(o.x) === x && Math.floor(o.y) === y && o.type.isObstacle);
     }
 }
-
