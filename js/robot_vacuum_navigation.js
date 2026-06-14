@@ -5,10 +5,13 @@ class NavigationSystem {
 
     static getEdgeTargets(room) {
         const edgeTargets = [];
-        for (let x = room.x1; x <= room.x2; x++) edgeTargets.push({ x, y: room.y1 });
-        for (let y = room.y1 + 1; y <= room.y2; y++) edgeTargets.push({ x: room.x2, y });
-        for (let x = room.x2 - 1; x >= room.x1; x--) edgeTargets.push({ x, y: room.y2 });
-        for (let y = room.y2 - 1; y > room.y1; y--) edgeTargets.push({ x: room.x1, y });
+        // Counter-clockwise perimeter (right-wall following) for brush-side edge cleaning.
+        // Starting from the top-left corner, tracing the boundary in counter-clockwise order
+        // means the vacuum's right side is always against the wall during traversal.
+        for (let y = room.y1; y <= room.y2; y++) edgeTargets.push({ x: room.x1, y });
+        for (let x = room.x1 + 1; x <= room.x2; x++) edgeTargets.push({ x, y: room.y2 });
+        for (let y = room.y2 - 1; y >= room.y1; y--) edgeTargets.push({ x: room.x2, y });
+        for (let x = room.x2 - 1; x >= room.x1 + 1; x--) edgeTargets.push({ x, y: room.y1 });
         return edgeTargets;
     }
 
@@ -124,8 +127,8 @@ class NavigationSystem {
         let cx = Math.floor(currentX); let cy = Math.floor(currentY);
 
         if (isEdgePhase) {
-            // ----------------------------------------------------
-            // CLOCKWISE EDGE SWEEP: generate full perimeter path
+            // COUNTER-CLOCKWISE EDGE SWEEP: generate full perimeter path with
+            // right-wall following so the brush-side always contacts the wall.
             // Bypasses obstacles by routing through interior tiles,
             // then returns to the edge on the other side.
             // If a target is truly unreachable it's skipped and the
