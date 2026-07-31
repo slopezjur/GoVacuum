@@ -1,16 +1,29 @@
+import { GameEngine } from './robot_vacuum_engine.js';
+
 // Bootstrap game and wire UI controls
 const app = new GameEngine();
 app.start();
 
-document.getElementById('cleanLivingRoomBtn').addEventListener('click', () => app.commandCleanRoom(0));
-document.getElementById('cleanBedroomBtn').addEventListener('click', () => app.commandCleanRoom(1));
-document.getElementById('cleanKitchenBtn').addEventListener('click', () => app.commandCleanRoom(2));
-document.getElementById('resetMapBtn').addEventListener('click', () => app.resetGame());
-document.getElementById('returnToBaseBtn').addEventListener('click', () => app.commandReturnToBase());
-document.getElementById('emergencyResetBtn').addEventListener('click', () => app.emergencyReset());
-document.getElementById('closeModalBtn').addEventListener('click', () => {
-    const modal = document.getElementById('stuckModal');
-    if (modal) {
-        modal.style.display = 'none';
+// Signal to the boot watchdog in index.html that the module bootstrap succeeded
+window.__GOVACUUM_BOOTED__ = true;
+
+/**
+ * Bind a click handler to a button, failing loudly in dev tools if the
+ * element is missing instead of throwing an opaque TypeError.
+ */
+function bindButton(id, handler) {
+    const element = document.getElementById(id);
+    if (!element) {
+        console.error(`UI bootstrap failed: #${id} not found`);
+        return;
     }
-});
+    element.addEventListener('click', handler);
+}
+
+bindButton('cleanLivingRoomBtn', () => app.commandCleanRoom(0));
+bindButton('cleanBedroomBtn', () => app.commandCleanRoom(1));
+bindButton('cleanKitchenBtn', () => app.commandCleanRoom(2));
+bindButton('resetMapBtn', () => app.resetGame());
+bindButton('returnToBaseBtn', () => app.commandReturnToBase());
+bindButton('emergencyResetBtn', () => app.emergencyReset());
+bindButton('closeModalBtn', () => app.hideStuckModal());

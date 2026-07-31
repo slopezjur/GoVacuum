@@ -1,17 +1,20 @@
 /**
  * GLOBAL CONFIGURATION
+ *
+ * Single source of truth for every tunable value in the simulator.
+ * Rates are expressed per second; the game loop scales them by delta time.
  */
-const CONFIG = {
+export const CONFIG = Object.freeze({
     CANVAS: { MAP_WIDTH: 600, MAP_HEIGHT: 360, CAM_WIDTH: 1024, CAM_HEIGHT: 360 },
     ROBOT: {
         START_X: 1.5, START_Y: 1.5,
         BASE_X: 1, BASE_Y: 1,
         BASE_FRONT_X: 2, BASE_FRONT_Y: 1,
-        SPEED: 0.0125,
-        TURN_SPEED: 0.025,
+        SPEED: 0.75,             // tiles per second
+        TURN_SPEED: 1.5,         // radians per second
         FOV: 0.66,
-        SENSOR_GRID_RANGE: 1, // Chebyshev distance for 3x3 square scanning
-        BRUSH_SPIN_SPEED: 0.18,
+        SENSOR_GRID_RANGE: 1,    // Chebyshev distance for 3x3 square scanning
+        BRUSH_SPIN_SPEED: 10.8,  // radians per second
         BRUSH_STICK_COUNT: 3
     },
     MAP_DATA: [
@@ -44,5 +47,4 @@ const CONFIG = {
         WALL_LIGHT: '#475569', WALL_DARK: '#334155', CEILING: '#1e293b', FLOOR: '#0f172a',
         PATH: 'rgba(6, 182, 212, 0.5)', ROBOT: '#10b981', DIRT: 'rgba(255, 255, 255, 0.15)'
     }
-};
-
+});

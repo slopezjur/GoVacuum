@@ -1,7 +1,9 @@
+import { CONFIG } from './robot_vacuum_config.js';
+
 /**
  * @class GameState
  */
-class GameState {
+export class GameState {
     constructor() {
         this.map = CONFIG.MAP_DATA;
         this.width = this.map[0].length;
@@ -51,11 +53,11 @@ class GameState {
             let placed = 0, attempts = 0;
             while(placed < 4 && attempts < 50) {
                 // Prevent placing objects blocking doorways/corridors
-                let safeX1 = room.x1 + 1; let safeX2 = room.x2 - 1;
-                let safeY1 = room.y1 + 1; let safeY2 = room.y2 - 1;
+                const safeX1 = room.x1 + 1; const safeX2 = room.x2 - 1;
+                const safeY1 = room.y1 + 1; const safeY2 = room.y2 - 1;
 
-                let ox = Math.floor(safeX1 + Math.random() * (safeX2 - safeX1 + 1));
-                let oy = Math.floor(safeY1 + Math.random() * (safeY2 - safeY1 + 1));
+                const ox = Math.floor(safeX1 + Math.random() * (safeX2 - safeX1 + 1));
+                const oy = Math.floor(safeY1 + Math.random() * (safeY2 - safeY1 + 1));
 
                 if (this.canPlaceObjectAt(ox, oy, objects)) {
                     const randomType = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
@@ -69,9 +71,9 @@ class GameState {
     }
 
     canPlaceObjectAt(gridX, gridY, objectsArray) {
-        let distToBase = Math.hypot((gridX + 0.5) - CONFIG.ROBOT.START_X, (gridY + 0.5) - CONFIG.ROBOT.START_Y);
-        let isOccupied = objectsArray.some(o => Math.floor(o.x) === gridX && Math.floor(o.y) === gridY);
-        let isBaseBlock = (gridX === CONFIG.ROBOT.BASE_X && gridY === CONFIG.ROBOT.BASE_Y) ||
+        const distToBase = Math.hypot((gridX + 0.5) - CONFIG.ROBOT.START_X, (gridY + 0.5) - CONFIG.ROBOT.START_Y);
+        const isOccupied = objectsArray.some(o => Math.floor(o.x) === gridX && Math.floor(o.y) === gridY);
+        const isBaseBlock = (gridX === CONFIG.ROBOT.BASE_X && gridY === CONFIG.ROBOT.BASE_Y) ||
                           (gridX === CONFIG.ROBOT.BASE_FRONT_X && gridY === CONFIG.ROBOT.BASE_FRONT_Y);
 
         return this.isValidPosition(gridX, gridY) && !isOccupied && distToBase >= 3 && !isBaseBlock;
@@ -89,7 +91,7 @@ class GameState {
 
         if (existingIndex !== -1) {
             // Remove object
-            let removedObj = this.actualObjects.splice(existingIndex, 1)[0];
+            const removedObj = this.actualObjects.splice(existingIndex, 1)[0];
             this.knownObjects = this.knownObjects.filter(o => o !== removedObj);
             return true;
         } else {
@@ -103,12 +105,12 @@ class GameState {
 
     // Simulate LiDAR / Camera sensors
     senseEnvironment(robotX, robotY, currentPath) {
-        let newlyDiscovered = [];
-        let gridRx = Math.floor(robotX); let gridRy = Math.floor(robotY);
+        const newlyDiscovered = [];
+        const gridRx = Math.floor(robotX); const gridRy = Math.floor(robotY);
 
         this.actualObjects.forEach(obj => {
             if (!this.knownObjects.includes(obj)) {
-                let gridOx = Math.floor(obj.x); let gridOy = Math.floor(obj.y);
+                const gridOx = Math.floor(obj.x); const gridOy = Math.floor(obj.y);
 
                 // Chebyshev distance: accurate grid-based 360 view
                 if (Math.abs(gridOx - gridRx) <= CONFIG.ROBOT.SENSOR_GRID_RANGE &&
@@ -121,8 +123,8 @@ class GameState {
 
         // Trigger replan only if a new object directly obstructs the planned path
         if (newlyDiscovered.length > 0 && currentPath.length > 0) {
-            for (let newObj of newlyDiscovered) {
-                for (let p of currentPath) {
+            for (const newObj of newlyDiscovered) {
+                for (const p of currentPath) {
                     if (Math.floor(p.x) === Math.floor(newObj.x) && Math.floor(p.y) === Math.floor(newObj.y)) {
                         return true;
                     }
@@ -160,26 +162,26 @@ class GameState {
     }
 
     getTilesCleanedInCurrentTargetRoom() {
-        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) return 0;
+        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) {return 0;}
         return this.roomTilesCleanedCount[this.currentTargetRoomId] || 0;
     }
 
     getTotalTilesInRoom(roomId) {
         const room = this.rooms.find(r => r.id === roomId);
-        if (!room) return 0;
+        if (!room) {return 0;}
         let count = 0;
         for (let y = room.y1; y <= room.y2; y++) {
             for (let x = room.x1; x <= room.x2; x++) {
-                if (this.isValidPosition(x, y)) count++;
+                if (this.isValidPosition(x, y)) {count++;}
             }
         }
         return count;
     }
 
     getCleanedRatioForCurrentTargetRoom() {
-        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) return 0;
+        if (this.currentTargetRoomId === null || this.currentTargetRoomId === undefined) {return 0;}
         const total = this.getTotalTilesInRoom(this.currentTargetRoomId);
-        if (total === 0) return 0;
+        if (total === 0) {return 0;}
         const cleaned = this.getTilesCleanedInCurrentTargetRoom();
         return cleaned / total;
     }

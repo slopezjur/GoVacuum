@@ -1,42 +1,83 @@
+import { CONFIG } from './robot_vacuum_config.js';
+
 /**
  * @class Renderer2D
+ *
+ * Overhead map renderer. Also owns the map's input handling:
+ * mouse click toggles an obstacle on the hovered tile, and a keyboard
+ * cursor (arrow keys + Enter/Space) provides an accessible equivalent.
  */
-class Renderer2D {
+export class Renderer2D {
     constructor(canvasId, inputCallback) {
         this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) {throw new Error(`Renderer2D: canvas #${canvasId} not found`);}
         this.ctx = this.canvas.getContext('2d');
+        // Canvas backing resolution is single-sourced from CONFIG
+        this.canvas.width = CONFIG.CANVAS.MAP_WIDTH;
+        this.canvas.height = CONFIG.CANVAS.MAP_HEIGHT;
         this.gridWidth = CONFIG.MAP_DATA[0].length;
         this.gridHeight = CONFIG.MAP_DATA.length;
+        // Keyboard cursor starts at the robot's base front tile
+        this.cursor = { x: CONFIG.ROBOT.BASE_FRONT_X, y: CONFIG.ROBOT.BASE_FRONT_Y, visible: false };
         this.setupInputs(inputCallback);
     }
 
     setupInputs(callback) {
         // Single click toggle
         this.canvas.addEventListener('click', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-
-            // Handle CSS object-fit scaling and letterboxing
-            const scale = Math.min(rect.width / this.canvas.width, rect.height / this.canvas.height);
-            const renderedWidth = this.canvas.width * scale;
-            const renderedHeight = this.canvas.height * scale;
-            const offsetX = (rect.width - renderedWidth) / 2;
-            const offsetY = (rect.height - renderedHeight) / 2;
-
-            // Mouse relative to rendered area
-            const mouseX = e.clientX - rect.left - offsetX;
-            const mouseY = e.clientY - rect.top - offsetY;
-
-            // Ignore clicks on letterbox bars
-            if (mouseX < 0 || mouseX >= renderedWidth || mouseY < 0 || mouseY >= renderedHeight) return;
-
-            // Exact tile size
-            const tileW = renderedWidth / this.gridWidth;
-            const tileH = renderedHeight / this.gridHeight;
-            const gridX = Math.floor(mouseX / tileW);
-            const gridY = Math.floor(mouseY / tileH);
-
-            callback(gridX, gridY);
+            const tile = this.eventToGrid(e);
+            if (tile) {callback(tile.x, tile.y);}
         });
+
+        // Keyboard equivalent: arrows move the cursor tile, Enter/Space toggles it
+        this.canvas.addEventListener('keydown', (e) => {
+            const moves = {
+                ArrowUp: [0, -1], ArrowDown: [0, 1],
+                ArrowLeft: [-1, 0], ArrowRight: [1, 0]
+            };
+            if (moves[e.key]) {
+                e.preventDefault();
+                const [dx, dy] = moves[e.key];
+                this.cursor.x = Math.max(0, Math.min(this.gridWidth - 1, this.cursor.x + dx));
+                this.cursor.y = Math.max(0, Math.min(this.gridHeight - 1, this.cursor.y + dy));
+                this.cursor.visible = true;
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.cursor.visible = true;
+                callback(this.cursor.x, this.cursor.y);
+            }
+        });
+
+        // Hide the keyboard cursor when the pointer takes over
+        this.canvas.addEventListener('pointerdown', () => { this.cursor.visible = false; });
+        this.canvas.addEventListener('blur', () => { this.cursor.visible = false; });
+    }
+
+    // Convert a mouse event to grid coordinates, handling CSS object-fit
+    // scaling and letterboxing. Returns null when the click lands on a letterbox bar.
+    eventToGrid(e) {
+        const rect = this.canvas.getBoundingClientRect();
+
+        const scale = Math.min(rect.width / this.canvas.width, rect.height / this.canvas.height);
+        const renderedWidth = this.canvas.width * scale;
+        const renderedHeight = this.canvas.height * scale;
+        const offsetX = (rect.width - renderedWidth) / 2;
+        const offsetY = (rect.height - renderedHeight) / 2;
+
+        // Mouse relative to rendered area
+        const mouseX = e.clientX - rect.left - offsetX;
+        const mouseY = e.clientY - rect.top - offsetY;
+
+        // Ignore clicks on letterbox bars
+        if (mouseX < 0 || mouseX >= renderedWidth || mouseY < 0 || mouseY >= renderedHeight) {return null;}
+
+        // Exact tile size
+        const tileW = renderedWidth / this.gridWidth;
+        const tileH = renderedHeight / this.gridHeight;
+        return {
+            x: Math.floor(mouseX / tileW),
+            y: Math.floor(mouseY / tileH)
+        };
     }
 
     render(state, robot) {
@@ -50,21 +91,22 @@ class Renderer2D {
         this.drawPath(robot.path, robot.x, robot.y);
         this.drawObjects(state.actualObjects, state.knownObjects);
         this.drawRobot(robot);
+        this.drawKeyboardCursor();
     }
 
     drawFloorsAndDirt(state) {
         for (let y = 0; y < state.height; y++) {
             for (let x = 0; x < state.width; x++) {
                 if (state.map[y][x] === 0) {
-                    let room = state.rooms.find(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2);
+                    const room = state.rooms.find(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2);
                     this.ctx.fillStyle = room ? room.color : CONFIG.COLORS.CEILING;
                     this.ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
 
                     if (state.dirtMap[y][x] === 1) {
                         this.ctx.fillStyle = CONFIG.COLORS.DIRT;
                         for (let i = 0; i < 4; i++) {
-                            let dx = (i % 2 * this.tileSize * 0.4) + (this.tileSize * 0.2);
-                            let dy = (Math.floor(i / 2) * this.tileSize * 0.4) + (this.tileSize * 0.2);
+                            const dx = (i % 2 * this.tileSize * 0.4) + (this.tileSize * 0.2);
+                            const dy = (Math.floor(i / 2) * this.tileSize * 0.4) + (this.tileSize * 0.2);
                             this.ctx.fillRect(x * this.tileSize + dx, y * this.tileSize + dy, 4, 4);
                         }
                     }
@@ -98,13 +140,13 @@ class Renderer2D {
         this.ctx.fillStyle = CONFIG.COLORS.WALL_LIGHT;
         for (let y = 0; y < state.height; y++) {
             for (let x = 0; x < state.width; x++) {
-                if (state.map[y][x] === 1) this.ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+                if (state.map[y][x] === 1) {this.ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);}
             }
         }
     }
 
     drawPath(path, rx, ry) {
-        if (path.length === 0) return;
+        if (path.length === 0) {return;}
         this.ctx.strokeStyle = CONFIG.COLORS.PATH; this.ctx.lineWidth = 4;
         this.ctx.beginPath(); this.ctx.moveTo(rx * this.tileSize, ry * this.tileSize);
         path.forEach(p => this.ctx.lineTo(p.x * this.tileSize, p.y * this.tileSize));
@@ -157,11 +199,10 @@ class Renderer2D {
 
             for (let i = 0; i < brushConfig.stickCount; i++) {
                 // Use brushConfig.angle when spinning (animated), otherwise use a static angle
-                const pinAngle = brushConfig.spinning 
+                const pinAngle = brushConfig.spinning
                     ? brushConfig.angle + (i * Math.PI * 2) / brushConfig.stickCount
                     : -Math.PI / 4 + (i * Math.PI * 2) / brushConfig.stickCount;
                 const innerR = brushRadius * 0.35;
-                const outerR = brushRadius;
 
                 const startX = brushCx + Math.cos(pinAngle) * innerR;
                 const startY = brushCy + Math.sin(pinAngle) * innerR;
@@ -175,5 +216,17 @@ class Renderer2D {
             }
         }
     }
-}
 
+    // Outline of the tile currently driven by the keyboard
+    drawKeyboardCursor() {
+        if (!this.cursor.visible) {return;}
+        this.ctx.strokeStyle = 'rgba(6, 182, 212, 0.9)';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(
+            this.cursor.x * this.tileSize + 1,
+            this.cursor.y * this.tileSize + 1,
+            this.tileSize - 2,
+            this.tileSize - 2
+        );
+    }
+}

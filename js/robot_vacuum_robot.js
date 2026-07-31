@@ -1,7 +1,9 @@
+import { CONFIG } from './robot_vacuum_config.js';
+
 /**
  * @class VacuumRobot
  */
-class VacuumRobot {
+export class VacuumRobot {
     constructor() {
         this.x = CONFIG.ROBOT.START_X;
         this.y = CONFIG.ROBOT.START_Y;
@@ -17,7 +19,11 @@ class VacuumRobot {
         this.path = newPath;
     }
 
-    update(state, currentTask, onCompleteCallback) {
+    /**
+     * Advance the simulation by `dt` seconds along the current path.
+     * All rates in CONFIG.ROBOT are per-second, so movement is frame-rate independent.
+     */
+    update(state, currentTask, onCompleteCallback, dt) {
         if (this.path.length === 0) {
             // Stop brush when no path (idle or docked)
             this.brushSpinning = false;
@@ -38,37 +44,38 @@ class VacuumRobot {
         // Brush stops during reverse-parking and when at base/idle
         this.brushSpinning = currentTask !== 'IDLE' && !isReversing && !this.isAtBase();
 
-        if (distance < CONFIG.ROBOT.SPEED) {
+        const stepDistance = CONFIG.ROBOT.SPEED * dt;
+        if (distance < stepDistance) {
             this.x = target.x; this.y = target.y;
             this.path.shift();
-            if (this.path.length === 0) onCompleteCallback();
+            if (this.path.length === 0) {onCompleteCallback();}
         } else {
-            this.rotateAndMove(dx, dy, isReversing);
+            this.rotateAndMove(dx, dy, isReversing, dt);
         }
 
         // Update brush rotation when spinning (counter-clockwise for dust collection)
         if (this.brushSpinning) {
-            this.brushAngle -= CONFIG.ROBOT.BRUSH_SPIN_SPEED;
+            this.brushAngle -= CONFIG.ROBOT.BRUSH_SPIN_SPEED * dt;
         }
 
         this.updateVectors();
         state.cleanDirtAt(this.x, this.y);
     }
 
-    rotateAndMove(dx, dy, isReversing) {
+    rotateAndMove(dx, dy, isReversing, dt) {
         let targetAngle = Math.atan2(dy, dx);
         // Reverse rotation
-        if (isReversing) targetAngle = Math.atan2(-dy, -dx); // Invert target angle
+        if (isReversing) {targetAngle = Math.atan2(-dy, -dx);} // Invert target angle
 
         let diff = targetAngle - this.angle;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) {diff += Math.PI * 2;}
+        while (diff > Math.PI) {diff -= Math.PI * 2;}
 
         if (Math.abs(diff) > 0.08) {
-            this.angle += Math.sign(diff) * CONFIG.ROBOT.TURN_SPEED; // Smooth rotation
+            this.angle += Math.sign(diff) * CONFIG.ROBOT.TURN_SPEED * dt; // Smooth rotation
         } else {
             this.angle = targetAngle;
-            let driveSpeed = isReversing ? -CONFIG.ROBOT.SPEED : CONFIG.ROBOT.SPEED; // Reverse thrust
+            const driveSpeed = (isReversing ? -CONFIG.ROBOT.SPEED : CONFIG.ROBOT.SPEED) * dt; // Reverse thrust
             this.x += Math.cos(this.angle) * driveSpeed;
             this.y += Math.sin(this.angle) * driveSpeed;
         }
@@ -99,4 +106,3 @@ class VacuumRobot {
         };
     }
 }
-

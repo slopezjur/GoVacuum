@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clean Vacuum Robot Simulator - Clockwise Edge Sweep</title>
+    <meta name="description" content="GoVacuum — autonomous vacuum cleaner robot simulator with 2D SLAM map and 3D raycasting first-person view.">
+    <title>GoVacuum — Autonomous Vacuum Cleaner Simulator</title>
     <link rel="stylesheet" href="css/robot_vacuum_game.css">
 </head>
 <body>
@@ -18,40 +19,65 @@
             <button id="resetMapBtn" class="warning">Reset Map</button>
             <button id="returnToBaseBtn" class="danger">Return to Base</button>
         </div>
-        <div class="status" id="statusText">System Initialized.</div>
+        <div class="status" id="statusText" role="status" aria-live="polite">System Initialized.</div>
     </div>
 
     <div class="view-container">
         <div class="panel">
             <header>
                 <span>Map View (Robot Memory)</span>
-                <span class="header-hint">Click: Add/Remove Real Object</span>
+                <span class="header-hint">Click or focus + arrows/Enter: Add/Remove Real Object</span>
             </header>
-            <canvas id="mapCanvas" width="600" height="360"></canvas>
-            
-            <div id="stuckModal">
-                <h2>⚠️ Robot Stuck</h2>
+            <!-- Backing resolution is set from CONFIG at runtime -->
+            <canvas id="mapCanvas" tabindex="0"
+                    role="application"
+                    aria-label="Robot memory map. Click a tile or use arrow keys and Enter to add or remove obstacles."></canvas>
+
+            <div id="bootError" role="alert">
+                <h2>⚠️ GoVacuum could not start</h2>
+                <p>You opened this file directly (<code>file://</code>). This simulator uses
+                <strong>ES modules</strong>, and browsers block them on <code>file://</code> pages for security reasons.</p>
+                <p>To run the simulator:</p>
+                <ol>
+                    <li>Open a terminal in the project folder.</li>
+                    <li>Run <code>npm run serve</code> (or <code>python -m http.server 3000</code>).</li>
+                    <li>Open the address it prints, e.g. <code>http://localhost:3000</code>.</li>
+                </ol>
+            </div>
+
+            <div id="stuckModal" role="dialog" aria-modal="true" aria-labelledby="stuckModalTitle">
+                <h2 id="stuckModalTitle">⚠️ Robot Stuck</h2>
                 <p>The vacuum cannot find a valid route due to obstacles.</p>
                 <div class="modal-actions">
                     <button id="emergencyResetBtn" class="danger">Reset at Base</button>
-                    <button id="closeModalBtn">Close & Clear Manually</button>
+                    <button id="closeModalBtn">Close &amp; Clear Manually</button>
                 </div>
             </div>
         </div>
         <div class="panel">
             <header>First-Person View (Panoramic Camera)</header>
-            <canvas id="camCanvas" width="1024" height="360"></canvas>
+            <canvas id="camCanvas"
+                    role="img"
+                    aria-label="First-person panoramic camera view of the robot."></canvas>
         </div>
     </div>
 </div>
 
-<script src="js/robot_vacuum_config.js"></script>
-<script src="js/robot_vacuum_game_state.js"></script>
-<script src="js/robot_vacuum_navigation.js"></script>
-<script src="js/robot_vacuum_robot.js"></script>
-<script src="js/robot_vacuum_renderer_2d.js"></script>
-<script src="js/robot_vacuum_renderer_3d.js"></script>
-<script src="js/robot_vacuum_engine.js"></script>
-<script src="js/robot_vacuum_game.js"></script>
+<script>
+    // Boot watchdog (classic script, runs even when modules are blocked).
+    // If the module bootstrap never completes — typically because the page was
+    // opened via file://, where browsers refuse to load ES modules — replace the
+    // silent blank screen with an actionable error message.
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            if (window.__GOVACUUM_BOOTED__) return;
+            const bootError = document.getElementById('bootError');
+            if (bootError) {
+                bootError.style.display = 'block';
+            }
+        }, 1500);
+    });
+</script>
+<script type="module" src="js/robot_vacuum_game.js"></script>
 </body>
 </html>

@@ -78,20 +78,26 @@ The project has been architected strictly following the **Single Responsibility 
 ```bash
 GoVacuum/
 ├── index.html                      # Main HTML document and UI structure (control panels & canvases)
+├── package.json                    # npm scripts (test / lint / serve) and dev dependencies
+├── eslint.config.js                # ESLint 9 flat config
 ├── css/
 │   └── robot_vacuum_game.css       # Core styling, responsive layouts, stuck modal styling
 ├── js/
 │   ├── robot_vacuum_config.js      # Global immutable configuration constants (CONFIG object, including BRUSH_SPIN_SPEED and BRUSH_STICK_COUNT)
 │   ├── robot_vacuum_game_state.js  # Core simulation state: actual vs. known obstacles, dirt map
-│   ├── robot_vacuum_navigation.js  # Static class for Dijkstra BFS pathfinding and sweep generation
-│   ├── robot_vacuum_robot.js       # Robot physical model (interpolation, smooth rotation, raycasting vectors, brush state management)
-│   ├── robot_vacuum_renderer_2d.js # Canvas-based 2D overhead map renderer (handles CSS scaling, brush visualization)
+│   ├── robot_vacuum_navigation.js  # Static class for A* pathfinding (binary min-heap) and sweep generation
+│   ├── robot_vacuum_robot.js       # Robot physical model (delta-time interpolation, smooth rotation, raycasting vectors, brush state management)
+│   ├── robot_vacuum_renderer_2d.js # Canvas-based 2D overhead map renderer (handles CSS scaling, brush visualization, keyboard cursor)
 │   ├── robot_vacuum_renderer_3d.js # Canvas-based 3D Raycasting engine & Sprite z-buffer renderer
 │   ├── robot_vacuum_engine.js      # GameLoop manager and task coordinator (IDLE/EDGE/INNER/RETURN)
 │   └── robot_vacuum_game.js        # Bootstrapper module wiring UI button inputs to the GameEngine
+├── tests/
+│   └── navigation.test.js          # Vitest suite for the navigation engine and game state
 └── docs/
-    └── GoVacuumInit.txt            # Original system specification and blueprint guidelines
+    └── GoVacuumInit.md             # Original system specification and blueprint guidelines
 ```
+
+All JavaScript is loaded as **native ES modules** (`<script type="module">`), with explicit `import`/`export` dependencies — no globals and no script-order coupling.
 
 ---
 
@@ -107,7 +113,7 @@ GoVacuum/
 *   **Docking Sequence:** When returning to base, once the robot reaches the base front tile, the engine appends a final waypoint on the base itself. The robot then smoothly **reverses into the dock** with negative speed. Once docked, its memory is wiped to prepare for the next mission.
 
 ### 3. Cleaning Brush Management
-*   **Brush Configuration (`CONFIG.ROBOT.BRUSH_SPIN_SPEED`, `CONFIG.ROBOT.BRUSH_STICK_COUNT`):** The vacuum features a cleaning brush with configurable rotation speed (0.18 rad/frame) and 3 visible pins/sticks.
+*   **Brush Configuration (`CONFIG.ROBOT.BRUSH_SPIN_SPEED`, `CONFIG.ROBOT.BRUSH_STICK_COUNT`):** The vacuum features a cleaning brush with configurable rotation speed (10.8 rad/s, delta-time scaled) and 3 visible pins/sticks.
 *   **Brush State Control:** The robot tracks `brushAngle` (rotation) and `brushSpinning` (on/off state). The brush spins during active cleaning tasks and stops while docked or reverse-parking.
 *   **2D Visualization:** The brush is rendered on the right side of the robot at a +45° offset from the facing direction, visible as rotating white pins within a subtle circular boundary. Always present in the 2D view — static when idle, spinning during cleaning.
 
@@ -127,6 +133,21 @@ GoVacuum/
 ## 🎮 How to Play / Run Locally
 Access to https://slopezjur.github.io/GoVacuum/ or
 1. Clone this repository to your local machine.
-2. Double-click `index.html` to open it in any modern browser (Chrome, Firefox, Safari, Edge).
-3. Use the top control bar to command the robot to sweep the **Living Room**, **Bedroom**, or **Kitchen**.
-4. Click anywhere on the 2D Map View canvas to dynamically add or remove obstacles and watch the robot recalculate its path on the fly!
+2. Serve the folder with any static file server (ES modules cannot load from `file://`):
+   ```bash
+   npm run serve        # zero-dependency static server (serve.mjs)
+   # or: python -m http.server 8000
+   ```
+3. Open the printed URL (e.g. `http://localhost:3000`) in any modern browser (Chrome, Firefox, Safari, Edge).
+4. Use the top control bar to command the robot to sweep the **Living Room**, **Bedroom**, or **Kitchen**.
+5. Click anywhere on the 2D Map View canvas — or focus it and use the arrow keys + Enter — to dynamically add or remove obstacles and watch the robot recalculate its path on the fly!
+
+## 🧪 Development
+
+```bash
+npm install     # one-time: installs ESLint and Vitest
+npm test        # run the Vitest suite (navigation engine + game state)
+npm run lint    # static analysis with ESLint
+```
+
+The game loop is **frame-rate independent**: all robot rates in `CONFIG.ROBOT` are expressed per second and scaled by the animation-frame delta time, so behavior is identical on 60 Hz and high-refresh displays.

@@ -1,0 +1,17 @@
+{
+  "name": "govacuum",
+  "version": "2.0.0",
+  "description": "Autonomous vacuum cleaner robot simulator — vanilla ES6, canvas 2D + raycasting 3D",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "vitest": "^3.0.0"
+  }
+}
