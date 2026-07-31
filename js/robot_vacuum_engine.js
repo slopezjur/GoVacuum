@@ -38,12 +38,12 @@ class GameEngine {
 
     replanRoute() {
         if (this.currentTask.type === 'CLEAN_EDGE') {
-            // Phase 1: Perimeter Sweep — dynamically update edgeStartIndex so replans
-            // always start searching from the robot's current perimeter position.
-            this.currentTask.edgeStartIndex = NavigationSystem.resolveEdgeStartIndex(
-                this.currentTask.room, this.robot.x, this.robot.y
-            );
-
+            // Phase 1: Perimeter Sweep — keep the edgeStartIndex locked for the whole
+            // mission. Recomputing it on every replan would restart the sweep from the
+            // geometrically closest edge tile, which after an obstacle detour is usually
+            // a tile BEHIND the robot, making it sweep the perimeter backwards (from the
+            // left side). The sweep generator itself resumes at the first still-dirty
+            // edge tile in counter-clockwise (right-wall) order.
             const sweepPath = NavigationSystem.generateRoomSweepPath(
                 this.state,
                 this.currentTask.room,
@@ -194,11 +194,11 @@ class GameEngine {
         this.state.resetDirtForRoom(room);
         this.state.currentTargetRoomId = room.id;
 
-        // Start with Edge Sweep Phase (lock clockwise start index for the whole perimeter pass)
+        // Start with Edge Sweep Phase (lock counter-clockwise start index for the whole perimeter pass)
         this.currentTask = {
             type: 'CLEAN_EDGE',
             room: room,
-            edgeStartIndex: NavigationSystem.resolveEdgeStartIndex(room, this.robot.x, this.robot.y)
+            edgeStartIndex: NavigationSystem.resolveEdgeStartIndex(this.state, room, this.robot.x, this.robot.y)
         };
         this.replanRoute();
         if (this.currentTask.type === 'CLEAN_EDGE') {

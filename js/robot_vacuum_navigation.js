@@ -30,17 +30,25 @@ class NavigationSystem {
         return false;
     }
 
-    static resolveEdgeStartIndex(room, robotX, robotY) {
+    // Pick the perimeter tile where the sweep should START: the one reachable from
+    // the robot's current position with the shortest path. Starting where the robot
+    // actually enters the room prevents it from crossing (and cleaning with the
+    // wrong orientation) perimeter tiles on its way to a far starting corner.
+    static resolveEdgeStartIndex(state, room, robotX, robotY) {
         const cx = Math.floor(robotX);
         const cy = Math.floor(robotY);
         const edgeTargets = this.getEdgeTargets(room);
         let closestIdx = 0;
-        let minDist = Infinity;
+        let minCost = Infinity;
 
         for (let i = 0; i < edgeTargets.length; i++) {
-            const d = Math.abs(edgeTargets[i].x - cx) + Math.abs(edgeTargets[i].y - cy);
-            if (d < minDist) {
-                minDist = d;
+            const target = edgeTargets[i];
+            if (!state.isValidPosition(target.x, target.y) || state.hasKnownObstacleAt(target.x, target.y)) continue;
+
+            // Pure travel distance (uniform weights) to each candidate starting tile
+            const path = this.findPath(state, cx, cy, target.x, target.y, null, null, true);
+            if (path.length > 0 && path.length < minCost) {
+                minCost = path.length;
                 closestIdx = i;
             }
         }
@@ -48,8 +56,9 @@ class NavigationSystem {
         return closestIdx;
     }
 
-    // DIJKSTRA Algorithm (Weighted BFS)
-    static findPath(state, startX, startY, endX, endY, plannedDirtMap = null, roomBounds = null, ignoreDirtFlag = false, edgePhase = false) {
+    // A* Algorithm (Manhattan-distance heuristic with h * 1.001 tie-breaker
+    // to prioritize straight trajectories)
+    static findPath(state, startX, startY, endX, endY, plannedDirtMap = null, roomBounds = null, ignoreDirtFlag = false) {
         if (startX === endX && startY === endY) return [];
 
         // Force base exit constraint: if starting from the base, the first tile of any path MUST be the base front tile
@@ -59,22 +68,25 @@ class NavigationSystem {
             if (bfx === endX && bfy === endY) {
                 return [{ x: bfx + 0.5, y: bfy + 0.5 }];
             }
-            const subPath = this.findPath(state, bfx, bfy, endX, endY, plannedDirtMap, roomBounds, ignoreDirtFlag, edgePhase);
+            const subPath = this.findPath(state, bfx, bfy, endX, endY, plannedDirtMap, roomBounds, ignoreDirtFlag);
             if (subPath.length > 0) {
                 return [{ x: bfx + 0.5, y: bfy + 0.5 }, ...subPath];
             }
             return [];
         }
 
-        let openSet = [{ x: startX, y: startY, g: 0, path: [] }];
+        // Manhattan heuristic; the * 1.001 multiplier breaks ties in favor of straight lines
+        const heuristic = (x, y) => (Math.abs(x - endX) + Math.abs(y - endY)) * 1.001;
+
+        let openSet = [{ x: startX, y: startY, g: 0, f: heuristic(startX, startY), path: [] }];
         let minG = new Map();
         minG.set(`${startX},${startY}`, 0);
 
         const directions = [[0,-1], [1,0], [0,1], [-1,0]];
 
         while (openSet.length > 0) {
-            // Process lowest cost path
-            openSet.sort((a, b) => a.g - b.g);
+            // Expand the node with the lowest estimated total cost (f = g + h)
+            openSet.sort((a, b) => a.f - b.f);
             let current = openSet.shift();
 
             if (current.x === endX && current.y === endY) return current.path;
@@ -86,7 +98,11 @@ class NavigationSystem {
                     if (!(nx === endX && ny === endY && !state.hasKnownObstacleAt(nx, ny))) continue;
                 }
 
-                // Weights logic
+                // Dynamic weight matrix (per functional spec):
+                //   dirty tile inside the room: 1
+                //   already cleaned tile:       5 (avoid re-stepping unless it is a mandatory bottleneck)
+                //   tile outside the room:     +50 ("mental walls")
+                //   known obstacle:       infinite (blocked above)
                 let stepCost = 1;
                 if (!ignoreDirtFlag) {
                     let isDirty = plannedDirtMap ? plannedDirtMap[ny][nx] === 1 : state.dirtMap[ny][nx] === 1;
@@ -98,13 +114,6 @@ class NavigationSystem {
                     stepCost += 50;
                 }
 
-                // During edge phase, prefer staying on the room perimeter, but keep the penalty low
-                // (e.g., +6) so that bypassing a known obstacle on the edge is cheaper than
-                // turning back and traversing the clean perimeter backwards.
-                if (edgePhase && roomBounds && !this.isRoomEdgeTile(roomBounds, nx, ny)) {
-                    stepCost += 6;
-                }
-
                 let nextG = current.g + stepCost;
 
                 let key = `${nx},${ny}`;
@@ -113,6 +122,7 @@ class NavigationSystem {
                     openSet.push({
                         x: nx, y: ny,
                         g: nextG,
+                        f: nextG + heuristic(nx, ny),
                         path: [...current.path, { x: nx + 0.5, y: ny + 0.5 }]
                     });
                 }
@@ -133,18 +143,33 @@ class NavigationSystem {
             // then returns to the edge on the other side.
             // If a target is truly unreachable it's skipped and the
             // sweep continues to the next reachable perimeter tile.
+            //
+            // The sweep always walks the perimeter in a fixed counter-clockwise
+            // order and resumes at the first edge tile that is still dirty in the
+            // REAL dirt map. Tiles already passed (and cleaned) are skipped, so a
+            // replan after sensing an obstacle continues forward around the room
+            // instead of restarting from the geometrically closest edge tile —
+            // which after an interior detour is usually a tile BEHIND the robot
+            // and would make it sweep the perimeter backwards (from the left side).
             // ----------------------------------------------------
             let edgeTargets = this.getEdgeTargets(room);
-            const startIdx = edgeStartIndex ?? this.resolveEdgeStartIndex(room, currentX, currentY);
+            const startIdx = edgeStartIndex ?? this.resolveEdgeStartIndex(state, room, currentX, currentY);
             edgeTargets = [...edgeTargets.slice(startIdx), ...edgeTargets.slice(0, startIdx)];
 
             let reachedNewTarget = false;
 
             for (let target of edgeTargets) {
-                // Skip if already cleaned, blocked by an obstacle, or invalid
+                // Skip if invalid, blocked by an obstacle, or already cleaned in a
+                // PREVIOUS pass (real dirt map). Previously-passed tiles stay skipped
+                // across replans, which is what keeps the sweep moving forward.
                 if (!state.isValidPosition(target.x, target.y) ||
-                    plannedDirt[target.y][target.x] === 0 ||
+                    state.dirtMap[target.y][target.x] === 0 ||
                     state.hasKnownObstacleAt(target.x, target.y)) {
+                    continue;
+                }
+
+                // Skip tiles already covered by the path built so far in THIS pass.
+                if (plannedDirt[target.y][target.x] === 0) {
                     continue;
                 }
 
@@ -153,7 +178,10 @@ class NavigationSystem {
                     continue;
                 }
 
-                let subPath = this.findPath(state, cx, cy, target.x, target.y, plannedDirt, room, false, true);
+                // Contour hugging: A* recalculates a short route around any known
+                // obstacle blocking the edge, keeping the sweep on the original
+                // counter-clockwise sequence (the obstacle face acts as a temporary wall).
+                let subPath = this.findPath(state, cx, cy, target.x, target.y, plannedDirt, room, false);
 
                 if (subPath.length > 0) {
                     fullPath.push(...subPath);
@@ -188,46 +216,73 @@ class NavigationSystem {
             }
         } else {
             // ----------------------------------------------------
-            // INNER FILL SWEEP (Greedy nearest neighbor)
+            // INNER FILL SWEEP (Boustrophedon / lawnmower S-pattern)
             // ----------------------------------------------------
-            while(true) {
-                let targets = [];
-                for (let y = room.y1; y <= room.y2; y++) {
-                    for (let x = room.x1; x <= room.x2; x++) {
-                        if (state.isValidPosition(x, y) && plannedDirt[y][x] === 1 && !state.hasKnownObstacleAt(x, y)) {
-                            targets.push({ x, y });
-                        }
+            // Remaining dirty tiles are covered with continuous parallel lines
+            // traced along the LONGEST axis of the uncleaned region, minimizing
+            // 180° turns. A* routes around any obstacle cutting a line (contour
+            // bypass when the geometry allows it) and only transits through
+            // already-clean tiles when it is a mandatory bottleneck, so the
+            // current sub-zone is completed before moving to the next one.
+            let dirtyTiles = [];
+            for (let y = room.y1; y <= room.y2; y++) {
+                for (let x = room.x1; x <= room.x2; x++) {
+                    if (state.isValidPosition(x, y) && state.dirtMap[y][x] === 1 && !state.hasKnownObstacleAt(x, y)) {
+                        dirtyTiles.push({ x, y });
+                    }
+                }
+            }
+
+            if (dirtyTiles.length > 0) {
+                // Predominant axis of the uncleaned region (width vs. height)
+                let minX = Math.min(...dirtyTiles.map(t => t.x));
+                let maxX = Math.max(...dirtyTiles.map(t => t.x));
+                let minY = Math.min(...dirtyTiles.map(t => t.y));
+                let maxY = Math.max(...dirtyTiles.map(t => t.y));
+                const sweepHorizontal = (maxX - minX) >= (maxY - minY);
+
+                // Build the S-pattern target sequence: parallel lines with
+                // alternating direction so each line starts where the previous ended.
+                let sweepTargets = [];
+                if (sweepHorizontal) {
+                    for (let y = minY; y <= maxY; y++) {
+                        let line = dirtyTiles.filter(t => t.y === y).sort((a, b) => a.x - b.x);
+                        if ((y - minY) % 2 === 1) line.reverse();
+                        sweepTargets.push(...line);
+                    }
+                } else {
+                    for (let x = minX; x <= maxX; x++) {
+                        let line = dirtyTiles.filter(t => t.x === x).sort((a, b) => a.y - b.y);
+                        if ((x - minX) % 2 === 1) line.reverse();
+                        sweepTargets.push(...line);
                     }
                 }
 
-                if(targets.length === 0) break;
-
-                // Prioritize absolute proximity. Tie-breaker ensures horizontal striping.
-                targets.sort((a, b) => {
-                    let distA = Math.abs(a.x - cx) + Math.abs(a.y - cy);
-                    let distB = Math.abs(b.x - cx) + Math.abs(b.y - cy);
-
-                    let scoreA = distA + (Math.abs(a.y - cy) * 0.1);
-                    let scoreB = distB + (Math.abs(b.y - cy) * 0.1);
-
-                    return scoreA - scoreB;
-                });
-
-                let nextTarget = targets.shift();
-
-                let subPath = this.findPath(state, cx, cy, nextTarget.x, nextTarget.y, plannedDirt, room, false);
-
-                if (subPath.length > 0) {
-                    fullPath.push(...subPath);
-                    // Mark as mentally cleaned
-                    for(let p of subPath) {
-                        let px = Math.floor(p.x); let py = Math.floor(p.y);
-                        if (plannedDirt[py] && plannedDirt[py][px] !== undefined) plannedDirt[py][px] = 0;
+                for (let target of sweepTargets) {
+                    // Skip tiles cleaned in a previous pass or covered by the path built so far
+                    if (state.dirtMap[target.y][target.x] === 0 || plannedDirt[target.y][target.x] === 0) {
+                        continue;
                     }
-                    cx = nextTarget.x; cy = nextTarget.y;
-                } else {
-                    // Tile isolated by obstacles, give up on it
-                    plannedDirt[nextTarget.y][nextTarget.x] = 0;
+
+                    // Already standing on this tile; move to the next sweep target
+                    if (cx === target.x && cy === target.y) {
+                        continue;
+                    }
+
+                    let subPath = this.findPath(state, cx, cy, target.x, target.y, plannedDirt, room, false);
+
+                    if (subPath.length > 0) {
+                        fullPath.push(...subPath);
+                        // Mark as mentally cleaned
+                        for (let p of subPath) {
+                            let px = Math.floor(p.x); let py = Math.floor(p.y);
+                            if (plannedDirt[py] && plannedDirt[py][px] !== undefined) plannedDirt[py][px] = 0;
+                        }
+                        cx = target.x; cy = target.y;
+                    } else {
+                        // Tile isolated by obstacles, give up on it
+                        plannedDirt[target.y][target.x] = 0;
+                    }
                 }
             }
         }
