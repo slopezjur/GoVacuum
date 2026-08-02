@@ -14,7 +14,7 @@ export const CONFIG = Object.freeze({
         TURN_SPEED: 1.5,         // radians per second
         FOV: 0.66,
         SENSOR_GRID_RANGE: 1,    // Chebyshev distance for 3x3 square scanning
-        BRUSH_SPIN_SPEED: 10.8,  // radians per second
+        BRUSH_SPIN_SPEED: 21.6,  // radians per second
         BRUSH_STICK_COUNT: 3
     },
     MAP_DATA: [
