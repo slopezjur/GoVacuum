@@ -80,7 +80,7 @@ export class Renderer2D {
         };
     }
 
-    render(state, robot) {
+    render(state, robot, sensors) {
         // Internal drawing tile size
         this.tileSize = this.canvas.width / this.gridWidth;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -90,8 +90,33 @@ export class Renderer2D {
         this.drawWalls(state);
         this.drawPath(robot.path, robot.x, robot.y);
         this.drawObjects(state.actualObjects, state.knownObjects);
+        this.drawSensors(sensors.getSensorDebugInfo());
         this.drawRobot(robot);
         this.drawKeyboardCursor();
+    }
+
+    // Rotating LiDAR ray fan + flashes where rays hit an object
+    drawSensors(debugInfo) {
+        debugInfo.rays.forEach(r => {
+            this.ctx.strokeStyle = `rgba(6, 182, 212, ${0.35 * (r.ttl / CONFIG.SENSORS.RAY_TRAIL_TTL)})`;
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(r.x1 * this.tileSize, r.y1 * this.tileSize);
+            this.ctx.lineTo(r.x2 * this.tileSize, r.y2 * this.tileSize);
+            this.ctx.stroke();
+        });
+
+        debugInfo.hitFlashes.forEach(f => {
+            const life = f.ttl / CONFIG.SENSORS.HIT_FLASH_TTL;
+            this.ctx.strokeStyle = `rgba(249, 115, 22, ${0.9 * life})`;
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.arc(
+                f.x * this.tileSize, f.y * this.tileSize,
+                this.tileSize * 0.5 * (1.2 - life), 0, Math.PI * 2
+            );
+            this.ctx.stroke();
+        });
     }
 
     drawFloorsAndDirt(state) {

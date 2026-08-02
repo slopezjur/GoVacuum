@@ -13,9 +13,16 @@ export const CONFIG = Object.freeze({
         SPEED: 0.75,             // tiles per second
         TURN_SPEED: 1.5,         // radians per second
         FOV: 0.66,
-        SENSOR_GRID_RANGE: 1,    // Chebyshev distance for 3x3 square scanning
         BRUSH_SPIN_SPEED: 21.6,  // radians per second
         BRUSH_STICK_COUNT: 3
+    },
+    SENSORS: {
+        LIDAR_RANGE: 3,                      // tiles
+        LIDAR_RAY_COUNT: 16,                 // rays per full 360° revolution
+        LIDAR_ROTATION_SPEED: Math.PI * 2,   // radians per second (~1 sweep per second)
+        BUMPER_DISTANCE: 0.35,               // robot body radius in tiles — contact registration
+        RAY_TRAIL_TTL: 0.3,                  // seconds a cast ray stays visible
+        HIT_FLASH_TTL: 0.5                   // seconds an object hit flash stays visible
     },
     MAP_DATA: [
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],

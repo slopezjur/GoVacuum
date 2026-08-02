@@ -1,6 +1,7 @@
 import { CONFIG } from './robot_vacuum_config.js';
 import { GameState } from './robot_vacuum_game_state.js';
 import { NavigationSystem } from './robot_vacuum_navigation.js';
+import { SensorSystem } from './robot_vacuum_sensors.js';
 import { VacuumRobot } from './robot_vacuum_robot.js';
 import { Renderer2D } from './robot_vacuum_renderer_2d.js';
 import { Renderer3D } from './robot_vacuum_renderer_3d.js';
@@ -33,6 +34,7 @@ export class GameEngine {
     constructor() {
         this.state = new GameState();
         this.robot = new VacuumRobot();
+        this.sensors = new SensorSystem();
         this.renderer2D = new Renderer2D('mapCanvas', (x, y) => this.handleMapToggle(x, y));
         this.renderer3D = new Renderer3D('camCanvas');
         this.uiStatus = document.getElementById('statusText');
@@ -65,7 +67,9 @@ export class GameEngine {
     handleMapToggle(x, y) {
         const changed = this.state.toggleObstacleAt(x, y);
         if (changed) {
-            const triggerReplan = this.state.senseEnvironment(this.robot.x, this.robot.y, this.robot.path);
+            // Re-check via the sensor system: a dt of 0 casts no new LiDAR rays,
+            // so only the bumper can register a just-placed obstacle
+            const triggerReplan = this.sensors.scan(this.robot, this.state, this.robot.path, 0);
             if (triggerReplan && this.currentTask.type !== 'IDLE') {this.replanRoute();}
         }
     }
@@ -133,14 +137,14 @@ export class GameEngine {
         const dt = Math.min((now - this.lastFrameTime) / 1000, MAX_FRAME_DT);
         this.lastFrameTime = now;
 
-        // Activate simulated LiDAR
-        const pathBlocked = this.state.senseEnvironment(this.robot.x, this.robot.y, this.robot.path);
+        // Activate simulated sensors (rotating LiDAR + bumper)
+        const pathBlocked = this.sensors.scan(this.robot, this.state, this.robot.path, dt);
         if (pathBlocked && this.currentTask.type !== 'IDLE') {
             this.replanRoute();
         }
 
         this.robot.update(this.state, this.currentTask.type, () => this.onTaskComplete(), dt);
-        this.renderer2D.render(this.state, this.robot);
+        this.renderer2D.render(this.state, this.robot, this.sensors);
         this.renderer3D.render(this.state, this.robot);
         requestAnimationFrame((t) => this.gameLoop(t));
     }

@@ -153,14 +153,3 @@ describe('GameState obstacle toggling', () => {
         expect(state.actualObjects.some(o => Math.floor(o.x) === 4 && Math.floor(o.y) === 4)).toBe(false);
     });
 });
-
-describe('senseEnvironment', () => {
-    it('discovers objects within Chebyshev range 1 only', () => {
-        state.actualObjects.push({ x: 3.5, y: 2.5, type: CONFIG.OBJECT_TYPES.TEDDY });   // adjacent
-        state.actualObjects.push({ x: 9.5, y: 9.5, type: CONFIG.OBJECT_TYPES.BALL });    // far away
-        state.senseEnvironment(2.5, 2.5, []);
-        const discovered = state.knownObjects.filter(o => o.type !== CONFIG.OBJECT_TYPES.BASE);
-        expect(discovered).toHaveLength(1);
-        expect(discovered[0].type).toBe(CONFIG.OBJECT_TYPES.TEDDY);
-    });
-});

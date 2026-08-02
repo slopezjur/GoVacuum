@@ -103,37 +103,6 @@ export class GameState {
         }
     }
 
-    // Simulate LiDAR / Camera sensors
-    senseEnvironment(robotX, robotY, currentPath) {
-        const newlyDiscovered = [];
-        const gridRx = Math.floor(robotX); const gridRy = Math.floor(robotY);
-
-        this.actualObjects.forEach(obj => {
-            if (!this.knownObjects.includes(obj)) {
-                const gridOx = Math.floor(obj.x); const gridOy = Math.floor(obj.y);
-
-                // Chebyshev distance: accurate grid-based 360 view
-                if (Math.abs(gridOx - gridRx) <= CONFIG.ROBOT.SENSOR_GRID_RANGE &&
-                    Math.abs(gridOy - gridRy) <= CONFIG.ROBOT.SENSOR_GRID_RANGE) {
-                    this.knownObjects.push(obj);
-                    newlyDiscovered.push(obj);
-                }
-            }
-        });
-
-        // Trigger replan only if a new object directly obstructs the planned path
-        if (newlyDiscovered.length > 0 && currentPath.length > 0) {
-            for (const newObj of newlyDiscovered) {
-                for (const p of currentPath) {
-                    if (Math.floor(p.x) === Math.floor(newObj.x) && Math.floor(p.y) === Math.floor(newObj.y)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     clearMemory() {
         // Format robot memory completely: clear obstacles and reset dirt map
         const baseObj = this.actualObjects.find(o => o.type === CONFIG.OBJECT_TYPES.BASE);
