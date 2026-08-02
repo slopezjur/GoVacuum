@@ -10,11 +10,28 @@ export const CONFIG = Object.freeze({
         START_X: 1.5, START_Y: 1.5,
         BASE_X: 1, BASE_Y: 1,
         BASE_FRONT_X: 2, BASE_FRONT_Y: 1,
+        DOCK_CLEARANCE: 1.5,     // tiles — radius around the dock where waypoints always require exact arrival (natural base exit)
         SPEED: 0.75,             // tiles per second
         TURN_SPEED: 1.5,         // radians per second
         FOV: 0.66,
         BRUSH_SPIN_SPEED: 21.6,  // radians per second
-        BRUSH_STICK_COUNT: 3
+        BRUSH_STICK_COUNT: 3,
+        // Right-side wall-follow controller (simulated IR wall sensor),
+        // active only during CLEAN_EDGE. All rates are per second.
+        WALL_FOLLOW: {
+            ENABLED: false,              // master switch — disabled for now (steering behavior under review)
+            TARGET_DISTANCE: 0.5,        // tiles — desired right-side wall offset (brush reach)
+            GAIN: 2.0,                   // rad of heading offset per tile of lateral error
+            DERIVATIVE_GAIN: 2.0,        // rad of damping per tile/s of error rate (prevents oscillation)
+            MAX_CORRECTION: 0.7,         // rad clamp on the heading offset from the route direction
+            RANGE: 1.2,                  // tiles — side-ray range; beyond it no wall is detected
+            FRONT_RANGE: 0.6,            // tiles — obstacle ahead closer than this = concave corner
+            LOST_WALL_GRACE: 1.0,        // s after losing the wall during which a convex corner is assumed
+            MAX_ERROR_RATE: 4.0,         // tiles/s — clamp on the derivative term (ray distance jumps at obstacle edges)
+            FALLBACK_TIMEOUT: 4.0,       // s without lateral convergence -> revert to waypoint pursuit
+            CONVERGENCE_TOLERANCE: 0.15, // tiles — |error| under this counts as converged
+            WAYPOINT_RADIUS: 0.75        // tiles — acceptance radius for INTERMEDIATE waypoints while wall-following
+        }
     },
     SENSORS: {
         LIDAR_RANGE: 3,                      // tiles

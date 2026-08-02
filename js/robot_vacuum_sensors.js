@@ -95,11 +95,21 @@ export class SensorSystem {
     }
 
     /**
-     * DDA grid march along a ray. Terminates on the first wall or object tile,
-     * or at LIDAR_RANGE. Returns { dist, object|null }.
+     * Short-range distance reading at a robot-relative angle — simulates the
+     * fixed IR wall sensor of a real vacuum (used by the wall-follow controller).
+     * Reuses the LiDAR DDA marcher; terminates on walls AND objects.
+     * `pose` is { x, y, angle }; `relativeAngle` is 0 = front, +PI/2 = right side
+     * (screen-space frame, y grows downward — same convention as the brush).
      */
-    castRay(state, ox, oy, angle) {
-        const range = CONFIG.SENSORS.LIDAR_RANGE;
+    measureSideDistance(state, pose, relativeAngle, range = CONFIG.ROBOT.WALL_FOLLOW.RANGE) {
+        return this.castRay(state, pose.x, pose.y, pose.angle + relativeAngle, range).dist;
+    }
+
+    /**
+     * DDA grid march along a ray. Terminates on the first wall or object tile,
+     * or at `range`. Returns { dist, object|null }.
+     */
+    castRay(state, ox, oy, angle, range = CONFIG.SENSORS.LIDAR_RANGE) {
         const dirX = Math.cos(angle); const dirY = Math.sin(angle);
         let mapX = Math.floor(ox); let mapY = Math.floor(oy);
 
@@ -124,7 +134,8 @@ export class SensorSystem {
             if (mapX < 0 || mapX >= state.width || mapY < 0 || mapY >= state.height || state.map[mapY][mapX] === 1) {
                 return { dist, object: null }; // wall: sight blocked, nothing registered
             }
-            const obj = state.actualObjects.find(o => Math.floor(o.x) === mapX && Math.floor(o.y) === mapY);
+            // The dock is flush with the floor: rays pass over it (it is not a wall)
+            const obj = state.actualObjects.find(o => o.type !== CONFIG.OBJECT_TYPES.BASE && Math.floor(o.x) === mapX && Math.floor(o.y) === mapY);
             if (obj) {
                 return { dist, object: obj };
             }

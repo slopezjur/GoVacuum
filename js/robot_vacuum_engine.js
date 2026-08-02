@@ -2,7 +2,7 @@ import { CONFIG } from './robot_vacuum_config.js';
 import { GameState } from './robot_vacuum_game_state.js';
 import { NavigationSystem } from './robot_vacuum_navigation.js';
 import { SensorSystem } from './robot_vacuum_sensors.js';
-import { VacuumRobot } from './robot_vacuum_robot.js';
+import { VacuumRobot, STEERING_MODE } from './robot_vacuum_robot.js';
 import { Renderer2D } from './robot_vacuum_renderer_2d.js';
 import { Renderer3D } from './robot_vacuum_renderer_3d.js';
 
@@ -143,7 +143,12 @@ export class GameEngine {
             this.replanRoute();
         }
 
-        this.robot.update(this.state, this.currentTask.type, () => this.onTaskComplete(), dt);
+        // Edge cleaning steers by continuous right-side wall feedback (when the
+        // feature is enabled); every other task uses plain waypoint pursuit
+        const steeringMode = this.currentTask.type === 'CLEAN_EDGE' && CONFIG.ROBOT.WALL_FOLLOW.ENABLED
+            ? STEERING_MODE.WALL_FOLLOW
+            : STEERING_MODE.PURSUIT;
+        this.robot.update(this.state, this.currentTask.type, () => this.onTaskComplete(), dt, steeringMode, this.sensors);
         this.renderer2D.render(this.state, this.robot, this.sensors);
         this.renderer3D.render(this.state, this.robot);
         requestAnimationFrame((t) => this.gameLoop(t));

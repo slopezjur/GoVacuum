@@ -91,6 +91,7 @@ export class Renderer2D {
         this.drawPath(robot.path, robot.x, robot.y);
         this.drawObjects(state.actualObjects, state.knownObjects);
         this.drawSensors(sensors.getSensorDebugInfo());
+        this.drawWallFollowRay(robot.getWallFollowDebugInfo());
         this.drawRobot(robot);
         this.drawKeyboardCursor();
     }
@@ -117,6 +118,17 @@ export class Renderer2D {
             );
             this.ctx.stroke();
         });
+    }
+
+    // Right-side wall-follow sensor ray (active during CLEAN_EDGE wall tracking)
+    drawWallFollowRay(ray) {
+        if (!ray) {return;}
+        this.ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)'; // rose, distinct from the cyan LiDAR fan
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(ray.x1 * this.tileSize, ray.y1 * this.tileSize);
+        this.ctx.lineTo(ray.x2 * this.tileSize, ray.y2 * this.tileSize);
+        this.ctx.stroke();
     }
 
     drawFloorsAndDirt(state) {
