@@ -27,6 +27,7 @@ Then open **http://localhost:3000** in any modern browser (Chrome, Firefox, Safa
 **How to play:**
 1. Use the top control bar to command the robot to sweep the **Living Room**, **Bedroom**, or **Kitchen**.
 2. Click anywhere on the 2D Map View canvas — or focus it and use the arrow keys + Enter — to dynamically add or remove obstacles and watch the robot recalculate its path on the fly!
+3. Click the **Stop/Debug** (emerald green) button at any time to pause the simulation. A JSON dump of the robot's current memory, path waypoints, and task state will appear in a split-view panel, allowing you to inspect the exact internal state of the pathing algorithm.
 
 ---
 

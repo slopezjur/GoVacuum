@@ -23,6 +23,7 @@ function bindButton(id, handler) {
 bindButton('cleanLivingRoomBtn', () => app.commandCleanRoom(0));
 bindButton('cleanBedroomBtn', () => app.commandCleanRoom(1));
 bindButton('cleanKitchenBtn', () => app.commandCleanRoom(2));
+bindButton('debugBtn', () => app.toggleDebug());
 bindButton('resetMapBtn', () => app.resetGame());
 bindButton('returnToBaseBtn', () => app.commandReturnToBase());
 bindButton('emergencyResetBtn', () => app.emergencyReset());

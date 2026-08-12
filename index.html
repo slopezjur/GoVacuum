@@ -16,6 +16,7 @@
             <button id="cleanLivingRoomBtn">Clean Living Room</button>
             <button id="cleanBedroomBtn">Clean Bedroom</button>
             <button id="cleanKitchenBtn">Clean Kitchen</button>
+            <button id="debugBtn" class="debug">Stop/Debug</button>
             <button id="resetMapBtn" class="warning">Reset Map</button>
             <button id="returnToBaseBtn" class="danger">Return to Base</button>
         </div>
@@ -56,9 +57,14 @@
         </div>
         <div class="panel">
             <header>First-Person View (Panoramic Camera)</header>
-            <canvas id="camCanvas"
-                    role="img"
-                    aria-label="First-person panoramic camera view of the robot."></canvas>
+            <div class="cam-container" id="camContainer">
+                <canvas id="camCanvas"
+                        role="img"
+                        aria-label="First-person panoramic camera view of the robot."></canvas>
+                <div id="debugPanel" style="display: none;">
+                    <textarea id="debugOutput" readonly></textarea>
+                </div>
+            </div>
         </div>
     </div>
 </div>

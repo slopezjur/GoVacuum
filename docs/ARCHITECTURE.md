@@ -53,7 +53,7 @@ The game loop is **frame-rate independent**: all robot rates in `CONFIG.ROBOT` a
 
 ### 4. Dual-SLAM Sensed Memory Model
 *   **Chebyshev Sensors:** The robot starts with zero knowledge of the room's obstacles. On each frame, its simulated LiDAR scans a 3x3 square around its location using Chebyshev distance.
-*   **Dynamic Rerouting:** Obstacles (emojis) are revealed on the 2D overview map with `1.0` opacity once scanned (or `0.4` ghost opacity under "fog-of-war" if unseen). If the user clicks on the 2D map to dynamically spawn obstacles directly in the robot's active path, `senseEnvironment()` registers the obstruction and triggers an immediate route replan.
+*   **Dynamic Rerouting:** Obstacles (emojis) are revealed on the 2D overview map with `1.0` opacity once scanned (or `0.4` ghost opacity under "fog-of-war" if unseen). If the user clicks on the 2D map to dynamically spawn or remove obstacles directly in the robot's active path, the engine registers the environment change and triggers an **unconditional immediate route replan**. This ensures the A* algorithm can instantly exploit newly unblocked shortcuts (when obstacles are removed) as well as detour around new blockages.
 
 ### 5. 3D Raycasting Camera
 *   **Digital Differential Analysis (DDA):** Casts a series of rays within the robot's Field of View (FOV) across the grid columns.
@@ -61,3 +61,6 @@ The game loop is **frame-rate independent**: all robot rates in `CONFIG.ROBOT` a
 
 ### 6. Emergency Recovery Fail-safe
 *   **Anti-Stuck Protection:** If obstacles block all paths to the robot's target, movement is stopped, and a **"Robot Stuck"** modal is displayed. Users can choose to perform an **emergency reset** (safely respawning the robot at the base) or close the modal and click to manually clear the blocking obstacles.
+
+### 7. Debugging & State Inspection
+*   **Stop/Debug Mode:** The simulation features an integrated debug hook that pauses the `requestAnimationFrame` delta-time step. When activated, it halts physics and sensor scans, splitting the 3D viewport to dump the real-time `GameState` (robot coordinates, active task, remaining A* waypoints, and `knownObjects` memory) as formatted JSON. This allows developers to inspect the exact heuristic decisions made by the navigation engine at any given frame.

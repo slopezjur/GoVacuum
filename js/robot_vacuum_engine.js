@@ -43,6 +43,7 @@ export class GameEngine {
         // Current task state: IDLE, CLEAN_EDGE, CLEAN_INNER, RETURN
         this.currentTask = { type: 'IDLE', room: null };
 
+        this.isPaused = false;
         this.lastFrameTime = null;
         this.focusBeforeModal = null;
     }
@@ -64,13 +65,51 @@ export class GameEngine {
         this.hideStuckModal();
     }
 
+    toggleDebug() {
+        this.isPaused = !this.isPaused;
+        const debugBtn = document.getElementById('debugBtn');
+        const camContainer = document.getElementById('camContainer');
+        const debugPanel = document.getElementById('debugPanel');
+        const debugOutput = document.getElementById('debugOutput');
+
+        if (this.isPaused) {
+            if (debugBtn) debugBtn.innerText = 'Resume';
+            if (camContainer) camContainer.classList.add('debug-active');
+            if (debugPanel) debugPanel.style.display = 'flex';
+            
+            if (debugOutput) {
+                const dump = {
+                    task: this.currentTask,
+                    robot: {
+                        x: this.robot.x,
+                        y: this.robot.y,
+                        angle: this.robot.angle,
+                        path: this.robot.path
+                    },
+                    knownObjects: this.state.knownObjects
+                };
+                debugOutput.value = JSON.stringify(dump, null, 2);
+            }
+        } else {
+            if (debugBtn) debugBtn.innerText = 'Stop/Debug';
+            if (camContainer) camContainer.classList.remove('debug-active');
+            if (debugPanel) debugPanel.style.display = 'none';
+            this.lastFrameTime = performance.now();
+        }
+    }
+
     handleMapToggle(x, y) {
         const changed = this.state.toggleObstacleAt(x, y);
         if (changed) {
             // Re-check via the sensor system: a dt of 0 casts no new LiDAR rays,
             // so only the bumper can register a just-placed obstacle
-            const triggerReplan = this.sensors.scan(this.robot, this.state, this.robot.path, 0);
-            if (triggerReplan && this.currentTask.type !== 'IDLE') {this.replanRoute();}
+            this.sensors.scan(this.robot, this.state, this.robot.path, 0);
+            
+            // Unconditionally replan if the map changed and we are active, 
+            // so the robot immediately takes advantage of newly unblocked optimal routes.
+            if (this.currentTask.type !== 'IDLE') {
+                this.replanRoute();
+            }
         }
     }
 
@@ -136,6 +175,11 @@ export class GameEngine {
         // Frame-rate independent step; clamped against tab-switch spikes
         const dt = Math.min((now - this.lastFrameTime) / 1000, MAX_FRAME_DT);
         this.lastFrameTime = now;
+
+        if (this.isPaused) {
+            requestAnimationFrame((t) => this.gameLoop(t));
+            return;
+        }
 
         // Activate simulated sensors (rotating LiDAR + bumper)
         const pathBlocked = this.sensors.scan(this.robot, this.state, this.robot.path, dt);
