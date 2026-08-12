@@ -9,7 +9,10 @@ export class GameState {
         this.width = this.map[0].length;
         this.height = this.map.length;
         this.rooms = CONFIG.ROOMS;
+        this.reset();
+    }
 
+    reset() {
         this.actualObjects = this.generateInitialObjects();
 
         // ROBOT MEMORY: Objects and Dirt map

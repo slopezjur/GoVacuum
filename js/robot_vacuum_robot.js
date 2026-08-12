@@ -8,6 +8,10 @@ export const STEERING_MODE = Object.freeze({ PURSUIT: 'PURSUIT', WALL_FOLLOW: 'W
  */
 export class VacuumRobot {
     constructor() {
+        this.reset();
+    }
+
+    reset() {
         this.x = CONFIG.ROBOT.START_X;
         this.y = CONFIG.ROBOT.START_Y;
         this.angle = 0;

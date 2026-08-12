@@ -35,12 +35,23 @@ The game loop is **frame-rate independent**: all robot rates in `CONFIG.ROBOT` a
 
 ---
 
+## 🏗️ SOLID Architecture
+
+The core engine is strictly decoupled and adheres to SOLID principles:
+*   **Single Responsibility Principle (SRP):** The UI layer (`robot_vacuum_game.js`) is completely decoupled from the logic layer (`GameEngine`). The engine uses an event-based `uiCallbacks` hook to update the DOM, ensuring it has zero direct knowledge of HTML elements.
+*   **Open/Closed Principle (OCP) - State Pattern:** The robot's behavior logic is modeled using the State Pattern. `GameEngine` delegates the `update()` and `replan()` logic to dedicated task classes (`BaseTask`, `IdleTask`, `CleanEdgeTask`, `CleanInnerTask`, `ReturnTask`). Adding a new behavior (like a "Spot Clean" mode) requires creating a new subclass, leaving the core engine unmodified.
+*   **Dependency Inversion Principle (DIP):** The `GameEngine` receives its dependencies (`state`, `robot`, `sensors`, `renderer2D`, `renderer3D`) via its constructor rather than instantiating them internally. This allows the bootstrapper to fully wire the simulation, making the engine easily testable and mockable.
+
+---
+
 ## 🚀 Core Technologies & Implementation Details
 
 ### 1. A* Pathfinding & Routing
 *   **Path Planning (`robot_vacuum_navigation.js`):** Employs an **A\* (A-Star)** search with Manhattan-distance heuristic and a `h * 1.001` tie-break multiplier to favor straight trajectories over the 20x12 grid. Nodes are expanded from a binary min-heap and reconstructed once via parent pointers.
-*   **Dynamic Weight Matrix:** Unvisited "dirty" tiles cost `1`, already cleaned tiles cost `5` (avoid re-stepping unless it is a mandatory bottleneck), leaving the target room adds `+50` ("mental walls"), and known obstacles are impassable (infinite cost).
-*   **Perimeter & Interior Sweeping:** Runs a **counter-clockwise** perimeter trace (`CLEAN_EDGE`, right-wall following so the right-side brush always faces the wall), followed by a **Boustrophedon S-pattern** interior sweep (`CLEAN_INNER`) traced along the longest axis of the uncleaned region.
+*   **Dynamic Weight Matrix & Room Bounds:** Unvisited "dirty" tiles cost `1`, already cleaned tiles cost `5` (avoid re-stepping unless it is a mandatory bottleneck). Assigned room boundaries act as an absolute physical constraint (hard wall) preventing the robot from embarking on cross-house detours to reach trapped tiles. Known obstacles are impassable.
+*   **True Wall-Follower Edge Sweep:** During `CLEAN_EDGE`, the engine simulates a physical Right-Hand Rule trace to flawlessly dip into concave obstacle pockets.
+*   **A* Fast-Forward Optimization:** During the edge trace, if a pocket is already completely clean, the algorithm uses A* to transit straight to the next dirty segment, skipping redundant traces of clean geometry.
+*   **Boustrophedon Interior Sweep:** Follows up with a `CLEAN_INNER` S-pattern traced along the longest axis of the remaining uncleaned region.
 
 ### 2. Physical Navigation & Docking Symmetry
 *   **Base Station Exit Constraint:** To prevent the robot from executing unnatural turn rotations inside the charging dock, paths starting at the base station `(BASE_X, BASE_Y)` are restricted to step onto the base front `(BASE_FRONT_X, BASE_FRONT_Y)` first. The robot rolls out forward before turning.

@@ -5,9 +5,12 @@ import { SensorSystem } from './robot_vacuum_sensors.js';
 import { VacuumRobot, STEERING_MODE } from './robot_vacuum_robot.js';
 import { Renderer2D } from './robot_vacuum_renderer_2d.js';
 import { Renderer3D } from './robot_vacuum_renderer_3d.js';
-
+import { IdleTask } from './tasks/IdleTask.js';
+import { CleanEdgeTask } from './tasks/CleanEdgeTask.js';
+import { CleanInnerTask } from './tasks/CleanInnerTask.js';
+import { ReturnTask } from './tasks/ReturnTask.js';
 // User-facing status messages, centralized for maintainability (and future i18n)
-const STATUS = {
+export const STATUS = {
     INIT: 'System Initialized.',
     MAP_RESET: 'Status: Map reset to default values.',
     PERIMETER_MAPPING: 'Status: Room perimeter mapped. Cleaning interior...',
@@ -31,21 +34,19 @@ const MAX_FRAME_DT = 0.1;
  * @class GameEngine
  */
 export class GameEngine {
-    constructor() {
-        this.state = new GameState();
-        this.robot = new VacuumRobot();
-        this.sensors = new SensorSystem();
-        this.renderer2D = new Renderer2D('mapCanvas', (x, y) => this.handleMapToggle(x, y));
-        this.renderer3D = new Renderer3D('camCanvas');
-        this.uiStatus = document.getElementById('statusText');
-        this.stuckModal = document.getElementById('stuckModal');
+    constructor(state, robot, sensors, renderer2D, renderer3D, uiCallbacks) {
+        this.state = state;
+        this.robot = robot;
+        this.sensors = sensors;
+        this.renderer2D = renderer2D;
+        this.renderer3D = renderer3D;
+        this.uiCallbacks = uiCallbacks;
 
         // Current task state: IDLE, CLEAN_EDGE, CLEAN_INNER, RETURN
-        this.currentTask = { type: 'IDLE', room: null };
+        this.currentTask = new IdleTask(this);
 
         this.isPaused = false;
         this.lastFrameTime = null;
-        this.focusBeforeModal = null;
     }
 
     start() {
@@ -54,47 +55,37 @@ export class GameEngine {
     }
 
     resetGame() {
-        this.state = new GameState();
+        this.state.reset();
         this.emergencyReset();
         this.updateStatus(STATUS.MAP_RESET);
     }
 
     emergencyReset() {
-        this.robot = new VacuumRobot();
+        this.robot.reset();
         this.currentTask = { type: 'IDLE', room: null };
         this.hideStuckModal();
     }
 
     toggleDebug() {
         this.isPaused = !this.isPaused;
-        const debugBtn = document.getElementById('debugBtn');
-        const camContainer = document.getElementById('camContainer');
-        const debugPanel = document.getElementById('debugPanel');
-        const debugOutput = document.getElementById('debugOutput');
+        
+        const debugDump = {
+            status: "Debug Dump",
+            task: this.currentTask,
+            robot: {
+                x: this.robot.x,
+                y: this.robot.y,
+                angle: this.robot.angle,
+                path: this.robot.path
+            },
+            knownObjects: this.state.knownObjects
+        };
 
-        if (this.isPaused) {
-            if (debugBtn) debugBtn.innerText = 'Resume';
-            if (camContainer) camContainer.classList.add('debug-active');
-            if (debugPanel) debugPanel.style.display = 'flex';
-            
-            if (debugOutput) {
-                const dump = {
-                    status: this.systemMessage,
-                    task: this.currentTask,
-                    robot: {
-                        x: this.robot.x,
-                        y: this.robot.y,
-                        angle: this.robot.angle,
-                        path: this.robot.path
-                    },
-                    knownObjects: this.state.knownObjects
-                };
-                debugOutput.value = JSON.stringify(dump, null, 2);
-            }
-        } else {
-            if (debugBtn) debugBtn.innerText = 'Stop/Debug';
-            if (camContainer) camContainer.classList.remove('debug-active');
-            if (debugPanel) debugPanel.style.display = 'none';
+        if (this.uiCallbacks && this.uiCallbacks.onDebugToggle) {
+            this.uiCallbacks.onDebugToggle(this.isPaused, debugDump);
+        }
+
+        if (!this.isPaused) {
             this.lastFrameTime = performance.now();
         }
     }
@@ -114,55 +105,20 @@ export class GameEngine {
         }
     }
 
+    transitionToTask(type, room = null) {
+        if (type === 'IDLE') this.currentTask = new IdleTask(this);
+        else if (type === 'CLEAN_EDGE') this.currentTask = new CleanEdgeTask(this, room);
+        else if (type === 'CLEAN_INNER') this.currentTask = new CleanInnerTask(this, room);
+        else if (type === 'RETURN') this.currentTask = new ReturnTask(this);
+
+        if (this.currentTask.type !== 'IDLE') {
+            this.currentTask.replan();
+        }
+    }
+
     replanRoute() {
-        if (this.currentTask.type === 'CLEAN_EDGE') {
-            // Phase 1: Perimeter Sweep
-            const sweepPath = NavigationSystem.generateRoomSweepPath(
-                this.state,
-                this.currentTask.room,
-                this.robot.x,
-                this.robot.y,
-                true
-            );
-
-            if (sweepPath.length === 0) {
-                // No more reachable edge tiles — either all cleaned or all blocked.
-                // Check if there are genuinely uncleaned edge tiles remaining;
-                // if not, transition to interior phase.
-                this.currentTask.type = 'CLEAN_INNER';
-                this.updateStatus(STATUS.PERIMETER_MAPPING);
-                this.replanRoute();
-                return;
-            }
-            this.robot.setPath(sweepPath);
-
-        } else if (this.currentTask.type === 'CLEAN_INNER') {
-            // Phase 2: Interior Sweep (S-Pattern Infill)
-            const sweepPath = NavigationSystem.generateRoomSweepPath(this.state, this.currentTask.room, this.robot.x, this.robot.y, false);
-
-            if (sweepPath.length === 0) {
-                this.handlePhaseCompletion('CLEAN_INNER');
-                return;
-            }
-            this.robot.setPath(sweepPath);
-
-        } else if (this.currentTask.type === 'RETURN') {
-            // Direct return path ignores dirt weights (ignoreDirtFlag = true)
-            const returnPath = NavigationSystem.findPath(this.state, Math.floor(this.robot.x), Math.floor(this.robot.y), CONFIG.ROBOT.BASE_FRONT_X, CONFIG.ROBOT.BASE_FRONT_Y, null, null, true);
-
-            if (returnPath.length > 0 || (Math.floor(this.robot.x) === CONFIG.ROBOT.BASE_FRONT_X && Math.floor(this.robot.y) === CONFIG.ROBOT.BASE_FRONT_Y)) {
-                returnPath.push({x: CONFIG.ROBOT.BASE_X + 0.5, y: CONFIG.ROBOT.BASE_Y + 0.5});
-            }
-
-            if (returnPath.length === 0) {
-                // No route home: the robot is genuinely stuck behind obstacles
-                this.updateStatus(STATUS.RETURN_BLOCKED);
-                this.robot.setPath([]);
-                this.showStuckModal();
-            } else {
-                this.hideStuckModal();
-                this.robot.setPath(returnPath);
-            }
+        if (this.currentTask.type !== 'IDLE') {
+            this.currentTask.replan();
         }
     }
 
@@ -182,55 +138,30 @@ export class GameEngine {
             this.replanRoute();
         }
 
-        // Edge cleaning steers by continuous right-side wall feedback (when the
-        // feature is enabled); every other task uses plain waypoint pursuit
-        const steeringMode = this.currentTask.type === 'CLEAN_EDGE' && CONFIG.ROBOT.WALL_FOLLOW.ENABLED
-            ? STEERING_MODE.WALL_FOLLOW
-            : STEERING_MODE.PURSUIT;
-        this.robot.update(this.state, this.currentTask.type, () => this.onTaskComplete(), dt, steeringMode, this.sensors);
+        this.currentTask.update(dt);
         this.renderer2D.render(this.state, this.robot, this.sensors);
         this.renderer3D.render(this.state, this.robot);
         requestAnimationFrame((t) => this.gameLoop(t));
     }
 
-    onTaskComplete() {
-        if (this.currentTask.type === 'CLEAN_EDGE' || this.currentTask.type === 'CLEAN_INNER') {
-            // Re-evaluate current phase, it will auto-transition if needed
-            this.replanRoute();
-        } else if (this.currentTask.type === 'RETURN') {
-            if (this.robot.isAtBase()) {
-                this.updateStatus(STATUS.IDLE_AT_BASE);
-                this.currentTask = { type: 'IDLE', room: null };
-                // Full reset only when safely docked
-                this.state.clearMemory();
-            } else {
-                // Abort fallback
-                this.updateStatus(STATUS.RETURN_COMPLETED);
-            }
-        }
-    }
+
 
     updateStatus(msg) {
-        this.uiStatus.innerText = msg;
+        if (this.uiCallbacks && this.uiCallbacks.onStatusUpdate) {
+            this.uiCallbacks.onStatusUpdate(msg);
+        }
     }
 
     showStuckModal() {
-        if (!this.stuckModal || this.stuckModal.style.display === 'block') {return;}
-        this.focusBeforeModal = document.activeElement;
-        this.stuckModal.style.display = 'block';
-        // Move focus into the dialog so keyboard/screen-reader users land on it
-        const firstButton = this.stuckModal.querySelector('button');
-        if (firstButton) {firstButton.focus();}
+        if (this.uiCallbacks && this.uiCallbacks.onShowStuckModal) {
+            this.uiCallbacks.onShowStuckModal();
+        }
     }
 
     hideStuckModal() {
-        if (!this.stuckModal || this.stuckModal.style.display !== 'block') {return;}
-        this.stuckModal.style.display = 'none';
-        // Restore focus to whatever the user was doing before the modal appeared
-        if (this.focusBeforeModal && typeof this.focusBeforeModal.focus === 'function') {
-            this.focusBeforeModal.focus();
+        if (this.uiCallbacks && this.uiCallbacks.onHideStuckModal) {
+            this.uiCallbacks.onHideStuckModal();
         }
-        this.focusBeforeModal = null;
     }
 
     handlePhaseCompletion(nextPhase) {
@@ -240,9 +171,8 @@ export class GameEngine {
         // If transitioning from CLEAN_EDGE to CLEAN_INNER naturally (edge done, interior remains),
         // just start the interior phase without showing a completion message yet.
         if (nextPhase === 'CLEAN_INNER' && this.currentTask.type === 'CLEAN_EDGE') {
-            this.currentTask.type = 'CLEAN_INNER';
             this.updateStatus(STATUS.PERIMETER_CLEANED);
-            this.replanRoute();
+            this.transitionToTask('CLEAN_INNER', room);
             return;
         }
 
@@ -270,8 +200,10 @@ export class GameEngine {
 
         // Reset target room so future counts don't leak
         this.state.currentTargetRoomId = null;
-        this.currentTask = { type: 'RETURN', room: null };
-        this.replanRoute();
+        this.state.roomOriginalDirtyCount = 0;
+
+        // Ensure we always return to base
+        this.transitionToTask('RETURN');
     }
 
     commandCleanRoom(roomId) {
@@ -301,20 +233,16 @@ export class GameEngine {
         this.state.resetDirtForRoom(room);
         this.state.currentTargetRoomId = room.id;
 
-        // Start with Edge Sweep Phase (lock counter-clockwise start index for the whole perimeter pass)
-        this.currentTask = {
-            type: 'CLEAN_EDGE',
-            room: room
-        };
-        this.replanRoute();
+        // Start with Edge Sweep Phase
+        this.transitionToTask('CLEAN_EDGE', room);
+        
         if (this.currentTask.type === 'CLEAN_EDGE') {
             this.updateStatus(STATUS.TRACING_PERIMETER(room));
         }
     }
 
     commandReturnToBase() {
-        this.currentTask = { type: 'RETURN', room: null };
-        this.replanRoute();
+        this.transitionToTask('RETURN');
         if (this.currentTask.type === 'RETURN') {
             this.updateStatus(STATUS.ABORT_RETURN);
         }

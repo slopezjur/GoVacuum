@@ -6,6 +6,11 @@ The simulator features a dual visual display:
 *   **2D Map View (Robot's SLAM Memory):** Displays the robot's real-time internal memory of room structures, dirt mapping, pathfinding waypoints, dynamically discovered objects (featuring a "fog of war" visual rendering), and the robot's cleaning brush visualization on its right side that spins during active cleaning tasks.
 *   **3D First-Person View (Panoramic Camera):** Renders a classic retro-style 3D perspective using custom **Raycasting (DDA algorithm)**, representing what the robot's panoramic camera sees.
 
+### 🧠 Advanced Routing Algorithms
+*   **True Wall-Follower (Right-Hand Rule):** Unlike simple shortest-path detours, the edge sweep simulates a physical right-hand wall follower that perfectly dips into and traces U-shaped obstacle pockets.
+*   **A* Fast-Forward Optimization:** The navigation engine scans ahead on the wall-contour; if it spots a clean gap, it uses A* to drive *straight* across the room to the next dirty edge tile, intelligently skipping clean dead-end pockets.
+*   **Strict Room Boundaries:** The pathfinder respects assigned room boundaries as hard physical constraints, gracefully abandoning pockets that are completely walled-off from the inside rather than embarking on a cross-house detour.
+
 ---
 
 ## 🚀 Quickstart

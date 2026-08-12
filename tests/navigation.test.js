@@ -113,8 +113,10 @@ describe('generateRoomSweepPath', () => {
     });
 
     it('edge phase returns [] when all edge tiles are already clean', () => {
-        for (const t of NavigationSystem.getEdgeTargets(LIVING_ROOM)) {
-            state.dirtMap[t.y][t.x] = 0;
+        const start = NavigationSystem.getValidContourStart(state, LIVING_ROOM);
+        const contour = NavigationSystem.generateRightHandContour(state, LIVING_ROOM, start.x, start.y, start.heading);
+        for (const t of [{x: start.x, y: start.y}, ...contour]) {
+            state.dirtMap[Math.floor(t.y)][Math.floor(t.x)] = 0;
         }
         const path = NavigationSystem.generateRoomSweepPath(state, LIVING_ROOM, 2.5, 2.5, true, 0);
         expect(path).toEqual([]);
