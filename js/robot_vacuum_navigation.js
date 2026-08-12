@@ -85,30 +85,79 @@ export class NavigationSystem {
         return false;
     }
 
-    // Pick the perimeter tile where the sweep should START: the one reachable from
-    // the robot's current position with the shortest path. Starting where the robot
-    // actually enters the room prevents it from crossing (and cleaning with the
-    // wrong orientation) perimeter tiles on its way to a far starting corner.
-    static resolveEdgeStartIndex(state, room, robotX, robotY) {
-        const cx = Math.floor(robotX);
-        const cy = Math.floor(robotY);
-        const edgeTargets = this.getEdgeTargets(room);
-        let closestIdx = 0;
-        let minCost = Infinity;
+    static getValidContourStart(state, room) {
+        for (let y = room.y1; y <= room.y2; y++) {
+            if (!state.hasKnownObstacleAt(room.x1, y)) return { x: room.x1, y: y, heading: 1 };
+        }
+        for (let x = room.x1; x <= room.x2; x++) {
+            if (!state.hasKnownObstacleAt(x, room.y2)) return { x: x, y: room.y2, heading: 0 };
+        }
+        for (let y = room.y2; y >= room.y1; y--) {
+            if (!state.hasKnownObstacleAt(room.x2, y)) return { x: room.x2, y: y, heading: 3 };
+        }
+        for (let x = room.x2; x >= room.x1; x--) {
+            if (!state.hasKnownObstacleAt(x, room.y1)) return { x: x, y: room.y1, heading: 2 };
+        }
+        return { x: room.x1, y: room.y1, heading: 1 };
+    }
 
-        for (let i = 0; i < edgeTargets.length; i++) {
-            const target = edgeTargets[i];
-            if (!state.isValidPosition(target.x, target.y) || state.hasKnownObstacleAt(target.x, target.y)) {continue;}
+    static generateRightHandContour(state, room, startX, startY, initialHeading) {
+        const path = [];
+        let currX = startX;
+        let currY = startY;
+        let heading = initialHeading;
 
-            // Pure travel distance (uniform weights) to each candidate starting tile
-            const path = this.findPath(state, cx, cy, target.x, target.y, null, null, true);
-            if (path.length > 0 && path.length < minCost) {
-                minCost = path.length;
-                closestIdx = i;
+        const visitedStates = new Set();
+        visitedStates.add(`${currX},${currY},${heading}`);
+
+        const MAX_STEPS = 1000;
+        let steps = 0;
+        const dirs = [
+            { dx: 1, dy: 0 },  // 0: Right
+            { dx: 0, dy: 1 },  // 1: Down
+            { dx: -1, dy: 0 }, // 2: Left
+            { dx: 0, dy: -1 }  // 3: Up
+        ];
+
+        while (steps < MAX_STEPS) {
+            const rightH = (heading + 1) % 4;
+            const forwardH = heading;
+            const leftH = (heading + 3) % 4;
+            const backH = (heading + 2) % 4;
+
+            const checks = [rightH, forwardH, leftH, backH];
+            let moved = false;
+
+            for (const h of checks) {
+                const nx = currX + dirs[h].dx;
+                const ny = currY + dirs[h].dy;
+
+                const isValid = state.isValidPosition(nx, ny) && 
+                                nx >= room.x1 && nx <= room.x2 && 
+                                ny >= room.y1 && ny <= room.y2 &&
+                                !state.hasKnownObstacleAt(nx, ny);
+
+                if (isValid) {
+                    const stateStr = `${nx},${ny},${h}`;
+                    if (visitedStates.has(stateStr)) {
+                        moved = false; // Loop closed
+                        break;
+                    }
+                    currX = nx;
+                    currY = ny;
+                    heading = h;
+                    path.push({ x: nx + 0.5, y: ny + 0.5 });
+                    visitedStates.add(stateStr);
+                    moved = true;
+                    break;
+                }
             }
+
+            if (!moved) break;
+            steps++;
         }
 
-        return closestIdx;
+        return path;
     }
 
     // A* Algorithm (Manhattan-distance heuristic with h * 1.001 tie-breaker
@@ -171,9 +220,9 @@ export class NavigationSystem {
                     stepCost = isDirty ? 1 : 5; // Clean tiles are expensive to step on
                 }
 
-                // Heavy penalty for leaving the target room during a sweep
+                // Strict constraint: absolutely forbid routing outside the assigned room
                 if (roomBounds && (nx < roomBounds.x1 || nx > roomBounds.x2 || ny < roomBounds.y1 || ny > roomBounds.y2)) {
-                    stepCost += 50;
+                    continue;
                 }
 
                 const nextG = current.g + stepCost;
@@ -203,88 +252,90 @@ export class NavigationSystem {
         return path.reverse();
     }
 
-    static generateRoomSweepPath(state, room, currentX, currentY, isEdgePhase, edgeStartIndex = null) {
+    static generateRoomSweepPath(state, room, currentX, currentY, isEdgePhase) {
         const plannedDirt = state.dirtMap.map(row => [...row]);
         const fullPath = [];
         let cx = Math.floor(currentX); let cy = Math.floor(currentY);
 
         if (isEdgePhase) {
-            // COUNTER-CLOCKWISE EDGE SWEEP: generate full perimeter path with
-            // right-wall following so the brush-side always contacts the wall.
-            // Bypasses obstacles by routing through interior tiles,
-            // then returns to the edge on the other side.
-            // If a target is truly unreachable it's skipped and the
-            // sweep continues to the next reachable perimeter tile.
-            //
-            // The sweep always walks the perimeter in a fixed counter-clockwise
-            // order and resumes at the first edge tile that is still dirty in the
-            // REAL dirt map. Tiles already passed (and cleaned) are skipped, so a
-            // replan after sensing an obstacle continues forward around the room
-            // instead of restarting from the geometrically closest edge tile —
-            // which after an interior detour is usually a tile BEHIND the robot
-            // and would make it sweep the perimeter backwards (from the left side).
-            // ----------------------------------------------------
-            let edgeTargets = this.getEdgeTargets(room);
-            const startIdx = edgeStartIndex ?? this.resolveEdgeStartIndex(state, room, currentX, currentY);
-            edgeTargets = [...edgeTargets.slice(startIdx), ...edgeTargets.slice(0, startIdx)];
+            const start = this.getValidContourStart(state, room);
+            const masterContour = this.generateRightHandContour(state, room, start.x, start.y, start.heading);
+            const fullContour = [{ x: start.x + 0.5, y: start.y + 0.5 }, ...masterContour];
 
-            let reachedNewTarget = false;
+            let minCost = Infinity;
+            let closestIdx = 0;
+            let bestTransit = [];
 
-            for (const target of edgeTargets) {
-                // Skip if invalid, blocked by an obstacle, or already cleaned in a
-                // PREVIOUS pass (real dirt map). Previously-passed tiles stay skipped
-                // across replans, which is what keeps the sweep moving forward.
-                if (!state.isValidPosition(target.x, target.y) ||
-                    state.dirtMap[target.y][target.x] === 0 ||
-                    state.hasKnownObstacleAt(target.x, target.y)) {
-                    continue;
-                }
-
-                // Skip tiles already covered by the path built so far in THIS pass.
-                if (plannedDirt[target.y][target.x] === 0) {
-                    continue;
-                }
-
-                // Already standing on this edge tile; move to the next perimeter target
-                if (cx === target.x && cy === target.y) {
-                    continue;
-                }
-
-                // Contour hugging: A* recalculates a short route around any known
-                // obstacle blocking the edge, keeping the sweep on the original
-                // counter-clockwise sequence (the obstacle face acts as a temporary wall).
-                const subPath = this.findPath(state, cx, cy, target.x, target.y, plannedDirt, room, false);
-
-                if (subPath.length > 0) {
-                    fullPath.push(...subPath);
-                    // Mark tiles along the found sub-path as mentally cleaned so we don't
-                    // immediately backtrack over them on the next replan.
-                    for (const p of subPath) {
-                        const px = Math.floor(p.x);
-                        const py = Math.floor(p.y);
-                        if (plannedDirt[py] && plannedDirt[py][px] !== undefined) {
-                            plannedDirt[py][px] = 0;
-                        }
+            // Find closest tile on the master contour
+            for (let i = 0; i < fullContour.length; i++) {
+                if (minCost === 0) break; 
+                
+                const ct = fullContour[i];
+                if (cx === Math.floor(ct.x) && cy === Math.floor(ct.y)) {
+                    minCost = 0;
+                    closestIdx = i;
+                    bestTransit = [];
+                } else {
+                    const transit = this.findPath(state, cx, cy, Math.floor(ct.x), Math.floor(ct.y), null, room, true);
+                    if (transit.length > 0 && transit.length < minCost) {
+                        minCost = transit.length;
+                        closestIdx = i;
+                        bestTransit = transit;
                     }
-                    cx = target.x;
-                    cy = target.y;
-                    reachedNewTarget = true;
-                    // Continue to the next edge target instead of breaking — this builds a
-                    // longer perimeter path that naturally curves around obstacles.
                 }
-                // Unreachable edge tile: leave plannedDirt as-is and try the next target.
-                // Only transition to CLEAN_INNER when *no* new target was reached in the
-                // entire pass (handled by the caller checking fullPath.length === 0).
             }
 
-            // If we didn't reach any new edge target at all, the perimeter is done / blocked.
-            if (!reachedNewTarget) {
-                // Mark remaining dirty edge tiles as cleaned so the caller transitions phases.
-                for (const target of edgeTargets) {
-                    if (plannedDirt[target.y]?.[target.x] === 1 && !state.hasKnownObstacleAt(target.x, target.y)) {
-                        plannedDirt[target.y][target.x] = 0;
-                    }
+            if (minCost === Infinity) return []; // Cannot reach the contour
+
+            fullPath.push(...bestTransit);
+            
+            // Re-order the contour loop to start from our anchor point
+            const nextIdx = (closestIdx + 1) % fullContour.length;
+            const pathFromContour = [
+                ...fullContour.slice(nextIdx),
+                ...fullContour.slice(0, nextIdx)
+            ];
+
+            // 1. Find the FIRST dirty tile on the remaining contour
+            let firstDirtyIdx = -1;
+            for (let i = 0; i < pathFromContour.length; i++) {
+                const px = Math.floor(pathFromContour[i].x);
+                const py = Math.floor(pathFromContour[i].y);
+                if (state.dirtMap[py] && state.dirtMap[py][px] === 1) {
+                    firstDirtyIdx = i;
+                    break;
                 }
+            }
+
+            if (firstDirtyIdx === -1) return []; // Perimeter is completely clean!
+
+            // 2. A* Fast-Forward: transit straight to the first dirty tile
+            const firstDirtyTile = pathFromContour[firstDirtyIdx];
+            if (cx !== Math.floor(firstDirtyTile.x) || cy !== Math.floor(firstDirtyTile.y)) {
+                const transit = this.findPath(state, cx, cy, Math.floor(firstDirtyTile.x), Math.floor(firstDirtyTile.y), null, room, false);
+                if (transit.length > 0) {
+                    fullPath.push(...transit);
+                }
+            } else {
+                // Robot is currently ON the first dirty tile, ensure we clean it
+                fullPath.push({ x: firstDirtyTile.x, y: firstDirtyTile.y });
+            }
+
+            // 3. Find the end of this contiguous block of dirty tiles on the contour
+            let endOfDirtyBlock = firstDirtyIdx;
+            while (endOfDirtyBlock + 1 < pathFromContour.length) {
+                const px = Math.floor(pathFromContour[endOfDirtyBlock + 1].x);
+                const py = Math.floor(pathFromContour[endOfDirtyBlock + 1].y);
+                if (state.dirtMap[py] && state.dirtMap[py][px] === 1) {
+                    endOfDirtyBlock++;
+                } else {
+                    break;
+                }
+            }
+
+            // 4. Push the remaining contiguous dirty contour segment
+            if (endOfDirtyBlock > firstDirtyIdx) {
+                fullPath.push(...pathFromContour.slice(firstDirtyIdx + 1, endOfDirtyBlock + 1));
             }
         } else {
             // ----------------------------------------------------
