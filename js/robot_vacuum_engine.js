@@ -62,7 +62,7 @@ export class GameEngine {
 
     emergencyReset() {
         this.robot.reset();
-        this.currentTask = { type: 'IDLE', room: null };
+        this.transitionToTask('IDLE');
         this.hideStuckModal();
     }
 
